@@ -1,6 +1,11 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Suivi Escales TC3</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b5c6b">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Escales TC3">
+<link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -216,6 +221,29 @@ function alertsFor(s){
   const rank={crit:0,warn:1,info:2}; return out.sort((a,b)=>rank[a[0]]-rank[b[0]]);
 }
 
+
+/* ---------- escales (historique par escale, calcule a partir des rapports) ---------- */
+function escales(){
+  const last=snaps[snaps.length-1], m=new Map(), lastOfShift=new Map();
+  snaps.forEach(s=>lastOfShift.set((s.window||'')+'|'+s.shift,s)); /* dernier rapport de chaque shift : evite de compter deux fois les mouvements cumules du shift */
+  snaps.forEach(s=>s.vessels.forEach(v=>{
+    let e=m.get(v.visit); if(!e){ e={visit:v.visit,name:v.name,first:s.ts,last:s.ts,acc:0,rem:null,mv:0,hrs:0,shifts:0}; m.set(v.visit,e); }
+    e.name=v.name; e.last=s.ts; e.acc=v.acc; e.rem=v.rem;
+  }));
+  lastOfShift.forEach(s=>s.vessels.forEach(v=>{ const e=m.get(v.visit), a=act(v); if(!e||!a.length) return;
+    e.shifts++; e.mv+=a.reduce((x,c)=>x+c.moves,0); e.hrs+=a.reduce((x,c)=>x+(c.hours||0),0); }));
+  return [...m.values()].map(e=>{ const present=!!(last&&last.vessels.some(v=>v.visit===e.visit));
+    return {...e,gmph:e.hrs?e.mv/e.hrs:null,present,statut:present?'En cours':(e.rem===0?'Terminée':'Sortie du rapport')}; })
+    .sort((a,b)=>(b.present-a.present)||(b.last-a.last));
+}
+function escalesTable(){
+  const L=escales(), cls={'En cours':'p-info','Terminée':'p-good','Sortie du rapport':'p-warn'};
+  const d=t=>new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  return `<h2>Escales suivies</h2><div class="tw card" style="padding:8px 12px"><table><thead><tr><th>Navire</th><th>Escale</th><th>Statut</th><th>Premier rapport</th><th>Dernier rapport</th><th class="r">Cumulé</th><th class="r">Restant</th><th class="r">GMPH moyen</th><th class="r">Shifts</th></tr></thead><tbody>
+  ${L.map(e=>`<tr><td>${esc(e.name)}</td><td class="num">${esc(e.visit)}</td><td><span class="pill ${cls[e.statut]}">${e.statut}</span></td><td class="num">${d(e.first)}</td><td class="num">${d(e.last)}</td><td class="r num">${fmt(e.acc)}</td><td class="r num">${fmt(e.rem)}</td><td class="r num">${fmt(e.gmph,1)}</td><td class="r num">${e.shifts}</td></tr>`).join('')}
+  </tbody></table></div><p class="note">Données calculées depuis le premier rapport importé. GMPH moyen = mouvements des postes actifs / heures de ces postes, sur le dernier rapport de chaque shift. « Sortie du rapport » : l'escale n'apparaît plus alors qu'il restait des mouvements.</p>`;
+}
+
 /* ---------- render ---------- */
 function render(){
   const on=!!session; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel'].forEach(q=>$(q).hidden=!on); $('#drop').hidden=!on;
@@ -238,6 +266,7 @@ function render(){
   <div class="alerts">${al.length?al.map(a=>`<div class="al"><span class="pill ${pcol[a[0]]}">${a[1]}</span><span>${esc(a[2])}</span></div>`).join(''):'<div class="al"><span class="pill p-good">RAS</span><span>Aucune anomalie détectée sur ce rapport.</span></div>'}</div>
   <h2>Avancement par navire</h2>
   <div class="grid">${s.vessels.map(v=>vesselCard(v,s)).join('')}</div>
+  ${escalesTable()}
   <h2>Historique</h2>
   <div class="ctrls" style="margin-bottom:10px">
     <div class="seg" role="group" aria-label="Indicateur">
@@ -340,6 +369,9 @@ function buildXlsx(s){
   const w3=XLSX.utils.aoa_to_sheet(hi); w3['!cols']=[18,24,22,10,10,18].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w3,'Historique');
   const al=[['Niveau','Alerte']]; alertsFor(s).forEach(a=>al.push([a[0]==='crit'?'Critique':a[0]==='warn'?'Alerte':'Info',a[2]]));
   const w4=XLSX.utils.aoa_to_sheet(al); w4['!cols']=[{wch:10},{wch:100}]; XLSX.utils.book_append_sheet(wb,w4,'Alertes');
+  const es=[['Navire','Escale','Statut','Premier rapport','Dernier rapport','Cumulé','Restant','GMPH moyen (postes actifs)','Shifts']];
+  escales().forEach(e=>es.push([e.name,e.visit,e.statut,when(e.first),when(e.last),e.acc,e.rem,r1(e.gmph),e.shifts]));
+  const w5=XLSX.utils.aoa_to_sheet(es); w5['!cols']=[22,12,18,18,18,10,10,22,8].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w5,'Escales');
   return XLSX.write(wb,{type:'array',bookType:'xlsx'});
 }
 function buildPdf(s){
@@ -376,5 +408,6 @@ function start(){ if(session) loadSnaps(); else render(); }
 sb.auth.getSession().then(({data})=>{ session=data.session; start(); });
 sb.auth.onAuthStateChange((_e,s)=>{ session=s; lastSig=''; start(); });
 setInterval(()=>{ if(session) loadSnaps(); },60000);
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 </script>
 </body></html>
