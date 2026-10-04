@@ -277,7 +277,7 @@ function alertsFor(s){
 const lastSnap=()=>snaps[snaps.length-1], lastHour=()=>hours[hours.length-1];
 /* la fenetre horaire est-elle posterieure au dernier rapport de shift ? (sinon ses mouvements sont deja comptes dans ce rapport) */
 const afterSnap=h=>{const l=lastSnap();return !!l&&h.ts-3600000>=l.ts-10*60000;};
-const HR=3600000, craneVessel=()=>{ const m=new Map(), l=lastSnap(); if(l) l.vessels.forEach(v=>v.cranes.forEach(c=>m.set(c.id,v))); return m; };
+const HR=3600000, craneVessel=()=>{ const m=new Map(), sc=new Map(), l=lastSnap(); /* une grue peut figurer sur 2 navires (ancien termine + nouveau) : on retient celui ou elle a le plus travaille, puis celui encore en cours */ if(l) l.vessels.forEach(v=>v.cranes.forEach(c=>{ const k=(c.moves||0)*1000+((v.rem||0)>0?1:0); if(!sc.has(c.id)||k>sc.get(c.id)){ sc.set(c.id,k); m.set(c.id,v); } })); return m; };
 const stCls=st=>/LOW/i.test(st)?'low':/CHECK/i.test(st)?'chk':/OK/i.test(st)?'ok':'na';
 const stPill=st=>/LOW/i.test(st)?'p-crit':/CHECK/i.test(st)?'p-warn':/OK/i.test(st)?'p-good':'p-info';
 const stLab=st=>/LOW/i.test(st)?'Faible':/CHECK/i.test(st)?'À vérifier':/OK/i.test(st)?'OK':st;
