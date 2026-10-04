@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Suivi Escales TC3</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+/* Layout: sticky harbour-signage header, status strip, alerts, vessel cards in a wrapping grid, history chart + table last. */
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --surface-2:#f5f7f8; --line:#d6dce1; --grid:#e4e8eb;
+  --fg:#10202b; --fg-2:#4a5b67; --fg-3:#76858f;
+  --accent:#0b5c6b; --accent-ink:#ffffff; --track:#dde3e7;
+  --good:#12805c; --warn:#a86a00; --crit:#b3261e; --info:#245fa8;
+  --good-bg:#e0f3ec; --warn-bg:#fbefd6; --crit-bg:#fbe3e1; --info-bg:#e1ebf8;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#4a3aa7;
+  --f-display:'Barlow Condensed','Arial Narrow',sans-serif;
+  --f-body:'IBM Plex Sans',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d171d; --surface:#142129; --surface-2:#1a2a33; --line:#27394350; --grid:#223540;
+  --fg:#e8eef2; --fg-2:#aebcc5; --fg-3:#7f909b;
+  --accent:#4fb3c4; --accent-ink:#06222a; --track:#27394a;
+  --good:#42c79b; --warn:#e0a63c; --crit:#f2877f; --info:#7ab0ee;
+  --good-bg:#12332a; --warn-bg:#392d12; --crit-bg:#3d1c1a; --info-bg:#162a42;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#9085e9;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d171d; --surface:#142129; --surface-2:#1a2a33; --line:#27394350; --grid:#223540;
+  --fg:#e8eef2; --fg-2:#aebcc5; --fg-3:#7f909b;
+  --accent:#4fb3c4; --accent-ink:#06222a; --track:#27394a;
+  --good:#42c79b; --warn:#e0a63c; --crit:#f2877f; --info:#7ab0ee;
+  --good-bg:#12332a; --warn-bg:#392d12; --crit-bg:#3d1c1a; --info-bg:#162a42;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#9085e9;
+  color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.45}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.login{max-width:360px;margin:48px auto;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:10px}
+.login input{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:8px 10px;min-height:38px}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:0 48px}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:2px solid var(--fg);padding-block:12px;margin-bottom:16px}
+.top-in{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+h1{font-family:var(--f-display);font-weight:700;font-size:30px;letter-spacing:.02em;text-transform:uppercase;margin:0;line-height:1}
+.sub{color:var(--fg-2);font-size:13px;margin-top:4px}
+.ctrls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select,button,input[type=number]{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:7px 10px;min-height:36px}
+button{cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.drop{border:1.5px dashed var(--fg-3);border-radius:4px;padding:10px 14px;color:var(--fg-2);font-size:13px;margin-bottom:16px;background:var(--surface)}
+.drop.over{border-color:var(--accent);background:var(--surface-2)}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0;border:1px solid var(--line);background:var(--surface);margin-bottom:16px}
+.strip>div{padding:10px 14px;border-right:1px solid var(--line)}
+.strip>div:last-child{border-right:0}
+.strip .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3)}
+.strip .v{font-family:var(--f-display);font-size:34px;font-weight:600;line-height:1.1}
+h2{font-family:var(--f-display);font-size:20px;letter-spacing:.04em;text-transform:uppercase;margin:24px 0 10px;font-weight:600}
+.alerts{display:flex;flex-direction:column;gap:6px}
+.al{display:flex;gap:10px;align-items:baseline;padding:8px 12px;border-radius:3px;border:1px solid var(--line);background:var(--surface)}
+.pill{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:2px;white-space:nowrap}
+.p-good{background:var(--good-bg);color:var(--good)}.p-warn{background:var(--warn-bg);color:var(--warn)}
+.p-crit{background:var(--crit-bg);color:var(--crit)}.p-info{background:var(--info-bg);color:var(--info)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:16px;min-width:0}
+.ch{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.vn{font-family:var(--f-display);font-size:26px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;line-height:1.05}
+.vv{color:var(--fg-3);font-size:12px}
+.pct{font-family:var(--f-display);font-size:40px;font-weight:600;line-height:1}
+.bar{display:flex;height:14px;background:var(--track);border-radius:2px;overflow:hidden;margin:10px 0 6px}
+.bar>i{display:block;background:var(--accent)}
+.bar-l{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--fg-2)}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px 14px;margin-top:14px}
+.kv .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3)}
+.kv .v{font-size:17px;font-weight:500}
+.kv .grp{grid-column:1/-1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-2);border-top:1px solid var(--line);padding-top:8px;margin-top:2px}
+.tw{overflow-x:auto;margin-top:12px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:left;font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid var(--grid);white-space:nowrap}
+td.r,th.r{text-align:right}
+.gb{display:inline-block;height:6px;background:var(--accent);border-radius:1px;vertical-align:middle;margin-left:6px}
+.chart{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:var(--surface)}
+.seg button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
+.leg{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0 0;font-size:12px;color:var(--fg-2)}
+.leg i{display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle}
+svg{display:block;width:100%;height:auto}
+svg text{fill:var(--fg-2);font-family:var(--f-body);font-size:11px}
+.tip{position:absolute;pointer-events:none;background:var(--fg);color:var(--bg);padding:6px 9px;font-size:12px;border-radius:3px;white-space:nowrap;z-index:3}
+.empty{padding:36px 16px;text-align:center;color:var(--fg-2);background:var(--surface);border:1px solid var(--line);border-radius:4px}
+.empty b{font-family:var(--f-display);font-size:22px;color:var(--fg);display:block;margin-bottom:6px;text-transform:uppercase}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:3px;z-index:9;max-width:90%}
+.note{color:var(--fg-3);font-size:12px;margin-top:8px}
+</style></head><body>
+<div class="wrap">
+<header class="top"><div class="top-in">
+  <div><h1>Suivi des escales &middot; TC3</h1><div class="sub" id="sub">Aucun rapport charg&eacute;</div></div>
+  <div class="ctrls">
+    <label for="snapSel" class="sub" style="margin:0">Rapport</label>
+    <select id="snapSel" aria-label="Choisir un rapport"></select>
+    <button type="button" id="btnOut" hidden>Déconnexion</button>
+    <button class="primary" id="btnImport" type="button">Importer le rapport horaire</button>
+    <button type="button" id="btnXlsx">Exporter Excel</button>
+    <button type="button" id="btnPdf">Exporter PDF</button>
+    <input id="file" type="file" accept=".xlsx,.xls" multiple hidden>
+  </div>
+</div></header>
+
+<div class="drop" id="drop">Glissez ici le fichier Excel re&ccedil;u chaque heure (REP_MM_END_SHIFT&hellip;) ou utilisez le bouton. Chaque import s'ajoute &agrave; l'historique.</div>
+<div id="app"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const fmt=(n,d=0)=>n==null||isNaN(n)?'—':Number(n).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const SERIES=['--s1','--s2','--s3','--s4','--s5','--s6'];
+let snaps=[], sel=null, metric='rem', THR=10, IDLE_H=2, db=null;
+
+/* ---------- parsing ---------- */
+function num(v){ if(typeof v==='number') return v; if(v==null) return null;
+  const s=String(v).replace(/[\s  ]/g,'').replace(',','.'); const n=parseFloat(s); return isNaN(n)?null:n; }
+function parseTs(s){ const m=String(s||'').match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/); if(!m) return null;
+  return new Date(+m[3],+m[2]-1,+m[1],+m[4],+m[5]); }
+function parseWorkbook(wb){
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const R=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
+  const row=(i,c)=>(R[i]||[])[c];
+  const gen=parseTs(row(1,18)); if(!gen) throw new Error("Date du rapport introuvable (cellule S2).");
+  const win=String(row(1,6)||''), shift=String(row(1,0)||'').trim();
+  const vessels=[];
+  for(let r=0;r<R.length;r++){
+    if(String(row(r,0)).trim()!=='WORKING VESSEL') continue;
+    const v={visit:String(row(r+2,0)).trim(),name:String(row(r+2,2)).trim(),phase:String(row(r+2,11)).trim(),
+      imp:num(row(r+4,0)),expF:num(row(r+4,1)),expE:num(row(r+4,4)),restow:num(row(r+4,7)),shiftTotal:num(row(r+4,10)),acc:num(row(r+4,14)),
+      remImp:num(row(r+6,0)),remF:num(row(r+6,2)),remE:num(row(r+6,5)),rem:num(row(r+6,9)),gmph:num(row(r+6,13)),cranes:[]};
+    for(let k=r+8;k<R.length&&String(row(k,0)).trim()!==''&&String(row(k,0)).trim()!=='WORKING VESSEL'&&!String(row(k,0)).startsWith('Definitions');k++){
+      v.cranes.push({id:String(row(k,0)).trim(),moves:num(row(k,3)),hours:num(row(k,8)),gmph:num(row(k,12)),src:String(row(k,17)).trim()});
+    }
+    if(v.visit) vessels.push(v);
+  }
+  if(!vessels.length) throw new Error("Aucun navire WORKING trouvé dans ce fichier.");
+  const p=n=>String(n).padStart(2,'0');
+  const id=''+gen.getFullYear()+p(gen.getMonth()+1)+p(gen.getDate())+p(gen.getHours())+p(gen.getMinutes());
+  return {id,ts:gen.getTime(),shift,window:win,vessels};
+}
+
+/* ---------- storage (Supabase) ---------- */
+const cfg=window.APP_CONFIG||{};
+const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
+let session=null, lastSig='';
+function mergeSnaps(list){ const m=new Map(snaps.map(s=>[s.id,s])); list.forEach(s=>m.set(s.id,s)); snaps=[...m.values()].sort((a,b)=>a.ts-b.ts); if(!sel||!m.has(sel)) sel=snaps.length?snaps[snaps.length-1].id:null; }
+function toast(t){ const e=$('#toast'); e.textContent=t; e.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>e.hidden=true,4200); }
+async function loadSnaps(){
+  const {data,error}=await sb.from('snapshots').select('data').order('ts',{ascending:true});
+  if(error){ toast('Lecture impossible : '+error.message); return; }
+  const sig=data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1));
+  if(sig===lastSig) return; lastSig=sig;
+  snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
+}
+async function saveSnap(s){
+  const {error}=await sb.from('snapshots').upsert({id:s.id,ts:new Date(s.ts).toISOString(),shift:s.shift,data:s});
+  if(error){ toast('Enregistrement impossible : '+error.message); return; }
+  lastSig=''; await loadSnaps();
+}
+function showLogin(){
+  $('#snapSel').innerHTML=''; $('#sub').textContent='Connexion requise';
+  $('#app').innerHTML=`<form class="login" id="lf"><b style="font-family:var(--f-display);font-size:22px;text-transform:uppercase">Connexion</b>
+    <label for="em" class="sub">Adresse e-mail</label><input id="em" type="email" autocomplete="username" required>
+    <label for="pw" class="sub">Mot de passe</label><input id="pw" type="password" autocomplete="current-password" required>
+    <button class="primary" type="submit">Se connecter</button><div class="note" id="lerr"></div></form>`;
+  $('#lf').onsubmit=async e=>{ e.preventDefault(); const {error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value}); if(error) $('#lerr').textContent='Connexion refusée : '+error.message; };
+}
+/* ---------- import ---------- */
+async function importFiles(files){
+  let ok=0; for(const f of files){
+    try{ const buf=await f.arrayBuffer(); const s=parseWorkbook(XLSX.read(buf,{type:'array'})); sel=s.id; await saveSnap(s); ok++; }
+    catch(e){ toast(f.name+' : '+e.message); }
+  }
+  if(ok){ toast(ok+' rapport'+(ok>1?'s':'')+' importé'+(ok>1?'s':'')); }
+}
+$('#btnImport').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; };
+const dz=$('#drop');
+['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over')}));
+dz.addEventListener('drop',e=>importFiles([...e.dataTransfer.files]));
+$('#snapSel').onchange=e=>{ sel=e.target.value; render(); };
+
+/* ---------- analysis ---------- */
+const act=v=>v.cranes.filter(c=>c.moves>0);
+function gm(v){ const a=act(v), h=a.reduce((s,c)=>s+(c.hours||0),0), m=a.reduce((s,c)=>s+c.moves,0); return h?m/h:null; }
+const val=(v,k)=>k==='gmph'?gm(v):v[k];
+const cur=()=>snaps.find(s=>s.id===sel);
+const prevOf=s=>{ const i=snaps.indexOf(s); return i>0?snaps[i-1]:null; };
+const pct=v=>{ const t=(v.acc||0)+(v.rem||0); return t?100*v.acc/t:null; };
+function eta(v,s){ const rate=act(v).reduce((a,c)=>a+(c.gmph||0),0);
+  if(!v.rem) return {txt:'Terminé',h:0}; if(!rate) return {txt:'—',h:null};
+  const h=v.rem/rate, t=new Date(s.ts+h*3600000), mm=Math.round(h*60);
+  return {h,txt:'≈ '+(mm>=60?Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0'):mm+' min'),clock:t.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}; }
+function alertsFor(s){
+  const out=[], p=prevOf(s);
+  s.vessels.forEach(v=>{
+    if(v.rem===0&&/WORKING/i.test(v.phase)) out.push(['info','Prêt à clôturer',`${v.name} : plus aucun mouvement restant, phase encore ${v.phase}. Confirmer la fin des opérations.`]);
+    if(gm(v)!=null&&gm(v)<THR&&v.rem>0) out.push(['warn','GMPH faible',`${v.name} : ${fmt(gm(v),1)} GMPH global (seuil ${THR}).`]);
+    if(p){ const pv=p.vessels.find(x=>x.visit===v.visit); if(pv&&v.rem>0&&pv.rem===v.rem&&pv.acc===v.acc) out.push(['crit','Aucune progression',`${v.name} : restant et cumulé inchangés depuis le rapport de ${new Date(p.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}.`]); }
+  });
+  const rank={crit:0,warn:1,info:2}; return out.sort((a,b)=>rank[a[0]]-rank[b[0]]);
+}
+
+/* ---------- render ---------- */
+function render(){
+  const on=!!session; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel'].forEach(q=>$(q).hidden=!on); $('#drop').hidden=!on;
+  if(!on){ showLogin(); return; }
+  const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${new Date(s.ts).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
+  const s=cur(), app=$('#app');
+  if(!s){ $('#sub').textContent='Aucun rapport chargé';
+    app.innerHTML=`<div class="empty"><b>Aucun rapport pour l'instant</b>Importez le fichier Excel horaire. Le tableau de bord affichera l'avancement de chaque navire, la productivité des grues, les alertes et l'historique.</div>`; return; }
+  $('#sub').textContent=`Rapport du ${new Date(s.ts).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})} · ${s.shift} · ${s.window}`;
+  const tot=s.vessels.reduce((a,v)=>({rem:a.rem+(v.rem||0),sh:a.sh+(v.shiftTotal||0),acc:a.acc+(v.acc||0)}),{rem:0,sh:0,acc:0});
+  const al=alertsFor(s), pcol={crit:'p-crit',warn:'p-warn',info:'p-info'}, plab={crit:'Critique',warn:'Alerte',info:'Info'};
+  app.innerHTML=`
+  <div class="strip">
+    <div><div class="k">Navires en cours</div><div class="v">${s.vessels.length}</div></div>
+    <div><div class="k">Mouvements restants</div><div class="v num">${fmt(tot.rem)}</div></div>
+    <div><div class="k">Mouvements du shift</div><div class="v num">${fmt(tot.sh)}</div></div>
+    <div><div class="k">Alertes</div><div class="v">${al.filter(a=>a[0]!=='info').length}</div></div>
+  </div>
+  <h2>Alertes</h2>
+  <div class="alerts">${al.length?al.map(a=>`<div class="al"><span class="pill ${pcol[a[0]]}">${a[1]}</span><span>${esc(a[2])}</span></div>`).join(''):'<div class="al"><span class="pill p-good">RAS</span><span>Aucune anomalie détectée sur ce rapport.</span></div>'}</div>
+  <h2>Avancement par navire</h2>
+  <div class="grid">${s.vessels.map(v=>vesselCard(v,s)).join('')}</div>
+  <h2>Historique</h2>
+  <div class="ctrls" style="margin-bottom:10px">
+    <div class="seg" role="group" aria-label="Indicateur">
+      ${[['rem','Mouvements restants'],['acc','Cumulé'],['gmph','GMPH (postes actifs)']].map(([k,l])=>`<button type="button" data-m="${k}" aria-pressed="${metric===k}">${l}</button>`).join('')}
+    </div>
+    <label for="thr" class="sub" style="margin:0 0 0 8px">Seuil GMPH</label><input id="thr" type="number" min="0" max="60" value="${THR}" style="width:72px">
+  </div>
+  <div class="chart" id="chart"></div>
+  <div class="tw card" style="padding:8px 12px"><table><thead><tr><th>Rapport</th><th>Shift</th>${vesselKeys().map(k=>`<th class="r">${esc(k.name)}<br>cumulé / restant</th>`).join('')}</tr></thead><tbody>
+  ${snaps.slice().reverse().map(sn=>`<tr><td class="num">${new Date(sn.ts).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(sn.shift)}</td>${vesselKeys().map(k=>{const v=sn.vessels.find(x=>x.visit===k.visit);return `<td class="r num">${v?fmt(v.acc)+' / '+fmt(v.rem):'—'}</td>`}).join('')}</tr>`).join('')}
+  </tbody></table></div>
+  <p class="note">Avancement = cumulé / (cumulé + restant). L'heure de fin estimée applique le restant au GMPH cumulé des grues ayant travaillé : indicatif, hors aléas.</p>`;
+  app.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{metric=b.dataset.m;render();});
+  $('#thr').onchange=e=>{THR=+e.target.value||0;render();};
+  drawChart();
+}
+function vesselCard(v,s){
+  const p=pct(v), e=eta(v,s), done=v.rem===0;
+  const cr=act(v), skipped=v.cranes.length-cr.length, maxG=Math.max(1,...cr.map(c=>c.gmph||0));
+  return `<article class="card"><div class="ch"><div><div class="vn">${esc(v.name)}</div><div class="vv num">Escale ${esc(v.visit)}</div></div>
+    <div style="text-align:right"><div class="pct num">${p==null?'—':fmt(p,1)+' %'}</div><span class="pill ${done?'p-good':'p-info'}">${done?'Terminé':esc(v.phase)}</span></div></div>
+    <div class="bar" role="img" aria-label="Avancement ${p==null?'':fmt(p,1)} %"><i style="width:${p||0}%"></i></div>
+    <div class="bar-l"><span><b class="num">${fmt(v.acc)}</b> faits</span><span><b class="num">${fmt(v.rem)}</b> restants</span></div>
+    <div class="kv">
+      <div class="grp">Restant à faire</div>
+      <div><div class="k">Import</div><div class="v num">${fmt(v.remImp)}</div></div>
+      <div><div class="k">Export plein</div><div class="v num">${fmt(v.remF)}</div></div>
+      <div><div class="k">Export vide</div><div class="v num">${fmt(v.remE)}</div></div>
+      <div class="grp">Réalisé pendant le shift (${esc(s.shift)})</div>
+      <div><div class="k">Import</div><div class="v num">${fmt(v.imp)}</div></div>
+      <div><div class="k">Export plein</div><div class="v num">${fmt(v.expF)}</div></div>
+      <div><div class="k">Export vide</div><div class="v num">${fmt(v.expE)}</div></div>
+      <div><div class="k">Restow</div><div class="v num">${fmt(v.restow)}</div></div>
+      <div><div class="k">Total shift</div><div class="v num">${fmt(v.shiftTotal)}</div></div>
+      <div><div class="k">GMPH global</div><div class="v num">${fmt(gm(v),1)}</div></div>
+      <div><div class="k">Fin estimée</div><div class="v">${e.txt}${e.clock?` <span class="vv">(${e.clock})</span>`:''}</div></div>
+    </div>
+    <div class="tw"><table><thead><tr><th>Grue</th><th class="r">Mvts</th><th class="r">Heures brutes</th><th class="r">GMPH</th></tr></thead><tbody>
+    ${cr.map(c=>`<tr><td><b>${esc(c.id)}</b></td><td class="r num">${fmt(c.moves)}</td><td class="r num">${fmt(c.hours,2)}</td><td class="r num">${fmt(c.gmph,1)}<span class="gb" style="width:${Math.round(40*(c.gmph||0)/maxG)}px"></span></td></tr>`).join('')}
+    </tbody></table></div>${skipped?`<div class="note">${skipped} poste${skipped>1?'s':''} à 0 mouvement ignoré${skipped>1?'s':''} (GMPH recalculé sur les postes actifs).</div>`:''}</article>`;
+}
+function vesselKeys(){ const m=new Map(); snaps.forEach(s=>s.vessels.forEach(v=>{ if(!m.has(v.visit)) m.set(v.visit,{visit:v.visit,name:v.name}); })); return [...m.values()]; }
+
+/* ---------- chart ---------- */
+function drawChart(){
+  const box=$('#chart'); const keys=vesselKeys(); const W=760,H=300,L=46,Rr=140,T=14,B=44;
+  const lab={rem:'Mouvements restants',acc:'Mouvements cumulés',gmph:'GMPH global'}[metric];
+  const pts=keys.map((k,i)=>({k,color:`var(${SERIES[i%SERIES.length]})`,p:snaps.map(s=>{const v=s.vessels.find(x=>x.visit===k.visit);return v&&val(v,metric)!=null?{t:s.ts,y:val(v,metric)}:null}).filter(Boolean)}));
+  const all=pts.flatMap(x=>x.p); const ymax0=Math.max(1,...all.map(a=>a.y));
+  const step=[1,2,5,10,20,50,100,200,500,1000,2000].find(st=>ymax0*1.08/st<=5)||5000; const ymax=Math.ceil(ymax0*1.05/step)*step;
+  const t0=snaps[0].ts,t1=snaps[snaps.length-1].ts;
+  const X=t=>t1===t0?L+(W-L-Rr)/2:L+(t-t0)/(t1-t0)*(W-L-Rr), Y=y=>T+(1-y/ymax)*(H-T-B);
+  let g='';
+  for(let y=0;y<=ymax;y+=step) g+=`<line x1="${L}" x2="${W-Rr}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--grid)"/><text x="${L-8}" y="${Y(y)+4}" text-anchor="end">${fmt(y)}</text>`;
+  const every=Math.ceil(snaps.length/8);
+  snaps.forEach((s,i)=>{ if(i%every===0) g+=`<text x="${X(s.ts)}" y="${H-8}" text-anchor="middle">${new Date(s.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</text>`; });
+  const placed=[];
+  pts.forEach(sr=>{ if(!sr.p.length) return;
+    const d=sr.p.map((a,i)=>(i?'L':'M')+X(a.t).toFixed(1)+' '+Y(a.y).toFixed(1)).join(' ');
+    g+=`<path d="${d}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linejoin="round"/>`;
+    sr.p.forEach(a=>g+=`<circle cx="${X(a.t)}" cy="${Y(a.y)}" r="4" fill="${sr.color}" stroke="var(--surface)" stroke-width="2"/>`);
+    const last=sr.p[sr.p.length-1]; let ly=Y(last.y)+4; while(placed.some(p=>Math.abs(p-ly)<13)) ly+=13; placed.push(ly);
+    g+=`<text x="${X(last.t)+10}" y="${ly}" style="fill:var(--fg);font-weight:500">${esc(sr.k.name)}</text>`; });
+  g+=`<line id="cx" x1="0" x2="0" y1="${T}" y2="${H-B}" stroke="var(--fg-3)" stroke-dasharray="3 3" visibility="hidden"/>`;
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${lab} par rapport">${g}<rect id="hit" x="${L}" y="${T}" width="${W-L-Rr}" height="${H-T-B}" fill="transparent"/></svg>
+  <div class="leg">${pts.map(sr=>`<span><i style="background:${sr.color}"></i>${esc(sr.k.name)}</span>`).join('')}<span style="margin-left:auto">${lab}</span></div>
+  ${snaps.length<2?'<div class="note">Un seul rapport pour l\'instant : importez le suivant pour voir les courbes évoluer.</div>':''}<div class="tip" hidden></div>`;
+  const svg=box.querySelector('svg'), hit=box.querySelector('#hit'), cx=box.querySelector('#cx'), tip=box.querySelector('.tip');
+  hit.addEventListener('mousemove',ev=>{ const r=svg.getBoundingClientRect(), sx=(ev.clientX-r.left)*W/r.width;
+    let best=snaps[0]; snaps.forEach(s=>{ if(Math.abs(X(s.ts)-sx)<Math.abs(X(best.ts)-sx)) best=s; });
+    cx.setAttribute('x1',X(best.ts)); cx.setAttribute('x2',X(best.ts)); cx.setAttribute('visibility','visible');
+    tip.innerHTML=`<b>${new Date(best.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</b><br>`+best.vessels.map(v=>`${esc(v.name)} : ${fmt(val(v,metric),metric==='gmph'?1:0)}`).join('<br>');
+    tip.hidden=false; const br=box.getBoundingClientRect(); tip.style.left=Math.min(ev.clientX-br.left+14,br.width-170)+'px'; tip.style.top=(ev.clientY-br.top+10)+'px'; });
+  hit.addEventListener('mouseleave',()=>{tip.hidden=true;cx.setAttribute('visibility','hidden');});
+}
+
+
+/* ---------- export ---------- */
+function fmtP(n,d=0){ if(n==null||isNaN(n)) return '-'; const [i,f]=Number(n).toFixed(d).split('.'); const g=i.replace(/\B(?=(\d{3})+(?!\d))/g,' '); return f?g+','+f:g; }
+function etaPlain(v,s){ const e=eta(v,s); return e.h==null?'-':e.h===0?'Termine':e.txt.replace('≈ ','~')+' ('+e.clock+')'; }
+const stamp=s=>{const d=new Date(s.ts),p=n=>String(n).padStart(2,'0');return ''+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes());};
+const when=ts=>new Date(ts).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(/[  ]/g,' ');
+function saveFile(name,data){
+  const type=name.endsWith('.pdf')?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type})); a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000); toast('Fichier prêt : '+name);
+}
+function buildXlsx(s){
+  const wb=XLSX.utils.book_new(), r1=v=>v==null?null:Math.round(v*10)/10;
+  const syn=[['Navire','Escale','Phase','Import shift','Export plein shift','Export vide shift','Restow shift','Total shift','Cumulé','Restant import','Restant export plein','Restant export vide','Restant total','Avancement %','GMPH (postes actifs)','Fin estimée']];
+  s.vessels.forEach(v=>{ const p=pct(v); syn.push([v.name,v.visit,v.phase,v.imp,v.expF,v.expE,v.restow,v.shiftTotal,v.acc,v.remImp,v.remF,v.remE,v.rem,p==null?null:Math.round(p*10)/10,r1(gm(v)),etaPlain(v,s)]); });
+  const w1=XLSX.utils.aoa_to_sheet([['Suivi des escales TC3 - rapport du '+when(s.ts)+' - '+s.shift+' - '+s.window],[],...syn]);
+  w1['!cols']=[22,12,10,11,14,14,11,10,10,13,16,16,13,13,16,18].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,w1,'Synthèse');
+  const cr=[['Navire','Grue','Mouvements shift','Heures brutes','GMPH']];
+  s.vessels.forEach(v=>act(v).forEach(c=>cr.push([v.name,c.id,c.moves,c.hours,c.gmph])));
+  const w2=XLSX.utils.aoa_to_sheet(cr); w2['!cols']=[22,10,16,14,10].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w2,'Grues actives');
+  const hi=[['Rapport','Shift','Navire','Cumulé','Restant','GMPH (postes actifs)']];
+  snaps.forEach(sn=>sn.vessels.forEach(v=>hi.push([when(sn.ts),sn.shift,v.name,v.acc,v.rem,r1(gm(v))])));
+  const w3=XLSX.utils.aoa_to_sheet(hi); w3['!cols']=[18,24,22,10,10,18].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w3,'Historique');
+  const al=[['Niveau','Alerte']]; alertsFor(s).forEach(a=>al.push([a[0]==='crit'?'Critique':a[0]==='warn'?'Alerte':'Info',a[2]]));
+  const w4=XLSX.utils.aoa_to_sheet(al); w4['!cols']=[{wch:10},{wch:100}]; XLSX.utils.book_append_sheet(wb,w4,'Alertes');
+  return XLSX.write(wb,{type:'array',bookType:'xlsx'});
+}
+function buildPdf(s){
+  const {jsPDF}=window.jspdf; const d=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const HEAD={fillColor:[11,92,107],textColor:255,fontSize:8.5}, BODY={fontSize:8.5,cellPadding:2};
+  d.setFont('helvetica','bold'); d.setFontSize(18); d.text('SUIVI DES ESCALES - TC3',14,16);
+  d.setFont('helvetica','normal'); d.setFontSize(10); d.setTextColor(80);
+  d.text('Rapport du '+when(s.ts)+'  |  '+s.shift.replace(/\s+/g,' ')+'  |  '+s.window,14,22);
+  const tot=s.vessels.reduce((a,v)=>({rem:a.rem+(v.rem||0),sh:a.sh+(v.shiftTotal||0)}),{rem:0,sh:0});
+  d.text(s.vessels.length+' navires en cours  |  '+fmtP(tot.rem)+' mouvements restants  |  '+fmtP(tot.sh)+' mouvements sur le shift',14,28);
+  d.setTextColor(0);
+  d.autoTable({startY:33,head:[['Navire','Escale','Phase','Cumulé','Restant','Rest. imp.','Rest. exp. plein','Rest. exp. vide','Total shift','GMPH','Avancement','Fin estimée']],
+    body:s.vessels.map(v=>{const p=pct(v);return [v.name,v.visit,v.phase,fmtP(v.acc),fmtP(v.rem),fmtP(v.remImp),fmtP(v.remF),fmtP(v.remE),fmtP(v.shiftTotal),fmtP(gm(v),1),p==null?'-':fmtP(p,1)+' %',etaPlain(v,s)];}),
+    headStyles:HEAD,styles:BODY,columnStyles:{3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'right'},7:{halign:'right'},8:{halign:'right'},9:{halign:'right'},10:{cellWidth:30,valign:'top',cellPadding:{top:2,bottom:6,left:2,right:2}}},
+    didDrawCell:data=>{ if(data.section==='body'&&data.column.index===10){ const v=s.vessels[data.row.index],p=pct(v)||0,x=data.cell.x+2,y=data.cell.y+data.cell.height-3.2,w=data.cell.width-4;
+      d.setFillColor(215,222,226); d.rect(x,y,w,1.8,'F'); d.setFillColor(11,92,107); d.rect(x,y,w*p/100,1.8,'F'); } }});
+  let y=d.lastAutoTable.finalY+8; d.setFont('helvetica','bold'); d.setFontSize(11); d.text('Grues actives (postes à 0 mouvement ignorés)',14,y);
+  const rows=[]; s.vessels.forEach(v=>act(v).forEach(c=>rows.push([v.name,c.id,fmtP(c.moves),fmtP(c.hours,2),fmtP(c.gmph,1)])));
+  d.autoTable({startY:y+3,head:[['Navire','Grue','Mouvements','Heures brutes','GMPH']],body:rows,headStyles:HEAD,styles:BODY,tableWidth:150,columnStyles:{2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}}});
+  const al=alertsFor(s); y=d.lastAutoTable.finalY+8; if(y>180){d.addPage();y=16;}
+  d.setFont('helvetica','bold'); d.setFontSize(11); d.text('Alertes',14,y);
+  d.autoTable({startY:y+3,head:[['Niveau','Alerte']],body:al.length?al.map(a=>[a[0]==='crit'?'Critique':a[0]==='warn'?'Alerte':'Info',a[2]]):[['RAS','Aucune anomalie détectée.']],headStyles:HEAD,styles:BODY,columnStyles:{0:{cellWidth:24},1:{cellWidth:'auto'}}});
+  if(snaps.length>1){ const keys=vesselKeys(); d.addPage(); d.setFont('helvetica','bold'); d.setFontSize(11); d.text('Historique (cumulé / restant)',14,16);
+    d.autoTable({startY:19,head:[['Rapport','Shift',...keys.map(k=>k.name)]],body:snaps.slice().reverse().map(sn=>[when(sn.ts),sn.shift.replace(/\s+/g,' '),...keys.map(k=>{const v=sn.vessels.find(x=>x.visit===k.visit);return v?fmtP(v.acc)+' / '+fmtP(v.rem):'-';})]),headStyles:HEAD,styles:BODY}); }
+  const n=d.getNumberOfPages(); for(let i=1;i<=n;i++){ d.setPage(i); d.setFontSize(8); d.setTextColor(120); d.text('Marsa Maroc - TC3 - page '+i+'/'+n,14,205); }
+  return d.output('arraybuffer');
+}
+$('#btnXlsx').onclick=()=>{ const s=cur(); if(s) saveFile('Suivi_escales_TC3_'+stamp(s)+'.xlsx',buildXlsx(s)); };
+$('#btnPdf').onclick=()=>{ const s=cur(); if(!s) return; try{ saveFile('Suivi_escales_TC3_'+stamp(s)+'.pdf',buildPdf(s)); }catch(e){ toast('PDF impossible : '+e.message); } };
+
+/* ---------- boot ---------- */
+$('#btnOut').onclick=()=>sb.auth.signOut();
+function start(){ if(session) loadSnaps(); else render(); }
+sb.auth.getSession().then(({data})=>{ session=data.session; start(); });
+sb.auth.onAuthStateChange((_e,s)=>{ session=s; lastSig=''; start(); });
+setInterval(()=>{ if(session) loadSnaps(); },60000);
+</script>
+</body></html>
