@@ -287,7 +287,9 @@ function estimate(v,s){
   const ids=new Set(v.cranes.map(c=>c.id));
   const mv=hs.reduce((a,h)=>a+h.cranes.filter(c=>ids.has(c.id)).reduce((x,c)=>x+(c.moves||0),0),0);
   const rem=Math.max(0,(v.rem||0)-mv), tot=(v.acc||0)+(v.rem||0), acc=tot-rem;
-  return {mv,rem,pct:tot?100*acc/tot:null,n:hs.length,upto:hs[hs.length-1]};
+  /* incoherent : les grues ont fait bien plus que le restant connu -> reaffectation ou travail ajoute, estimation non fiable */
+  const unreliable=mv>(v.rem||0)+10;
+  return {mv,rem,pct:tot?100*acc/tot:null,n:hs.length,upto:hs[hs.length-1],unreliable};
 }
 function hourlyAlerts(){
   const out=[], h=lastHour(); if(!h) return out;
@@ -295,9 +297,9 @@ function hourlyAlerts(){
   if(age>100) out.push(['warn','Rapport horaire en retard',`Dernier rapport horaire reçu : ${hTime(h,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} (fenêtre ${h.from}–${h.to}), il y a ${Math.round(age/60)} h. Vérifier l'arrivée des e-mails.`]);
   const cv=craneVessel(), prev=hours[hours.length-2];
   h.cranes.forEach(c=>{
-    const v=cv.get(c.id), working=v&&v.rem>0; if(!v) return; /* grue non affectée à un navire en cours : ignorée */
+    const v=cv.get(c.id), working=v&&v.rem>10; /* navire presque termine : pas d'alerte d'arret */ if(!v) return; /* grue non affectée à un navire en cours : ignorée */
     const p=prev&&prev.cranes.find(x=>x.id===c.id), idle2=c.moves===0&&p&&p.moves===0;
-    if(/LOW/i.test(c.status)) out.push(['warn','Grue sous le minimum',`${c.id} (${v.name}) : ${c.moves} mouvements sur 60 min (minimum ${h.min}).`]);
+    if(/LOW/i.test(c.status)&&(v.rem||0)>=(h.min||20)) out.push(['warn','Grue sous le minimum',`${c.id} (${v.name}) : ${c.moves} mouvements sur 60 min (minimum ${h.min}).`]);
     else if(/CHECK/i.test(c.status)&&working) out.push([idle2?'crit':'warn',idle2?'Grue à l\'arrêt':'Grue sans mouvement',`${c.id} (${v.name}) : 0 mouvement ${idle2?'depuis 2 heures':'sur la dernière heure'} alors qu'il reste ${fmt(v.rem)} mouvements. Confirmer l'affectation.`]);
   });
   return out;
@@ -337,11 +339,11 @@ function escales(){
   lastOfShift.forEach(s=>s.vessels.forEach(v=>{ const e=m.get(v.visit), a=act(v); if(!e||!a.length) return;
     e.shifts++; e.mv+=a.reduce((x,c)=>x+c.moves,0); e.hrs+=a.reduce((x,c)=>x+(c.hours||0),0); }));
   return [...m.values()].map(e=>{ const present=!!(last&&last.vessels.some(v=>v.visit===e.visit));
-    return {...e,gmph:e.hrs?e.mv/e.hrs:null,present,statut:present?'En cours':(e.rem===0?'Terminée':'Sortie du rapport')}; })
+    return {...e,gmph:e.hrs?e.mv/e.hrs:null,present,statut:present?(e.rem===0?'À clôturer':'En cours'):(e.rem===0?'Terminée':'Sortie du rapport')}; })
     .sort((a,b)=>(b.present-a.present)||(b.last-a.last));
 }
 function escalesTable(){
-  const L=escales(), cls={'En cours':'p-info','Terminée':'p-good','Sortie du rapport':'p-warn'};
+  const L=escales(), cls={'En cours':'p-info','À clôturer':'p-warn','Terminée':'p-good','Sortie du rapport':'p-warn'};
   const d=t=>new Date(t).toLocaleString('fr-FR',{timeZone:'UTC',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   return `<h2>Escales suivies</h2><div class="tw card" style="padding:8px 12px"><table><thead><tr><th>Navire</th><th>Escale</th><th>Statut</th><th>Premier rapport</th><th>Dernier rapport</th><th class="r">Cumulé</th><th class="r">Restant</th><th class="r">GMPH moyen</th><th class="r">Shifts</th></tr></thead><tbody>
   ${L.map(e=>`<tr><td>${esc(e.name)}</td><td class="num">${esc(e.visit)}</td><td><span class="pill ${cls[e.statut]}">${e.statut}</span></td><td class="num">${d(e.first)}</td><td class="num">${d(e.last)}</td><td class="r num">${fmt(e.acc)}</td><td class="r num">${fmt(e.rem)}</td><td class="r num">${fmt(e.gmph,1)}</td><td class="r num">${e.shifts}</td></tr>`).join('')}
@@ -409,7 +411,7 @@ function vesselCard(v,s){
       <div><div class="k">GMPH global</div><div class="v num">${fmt(gm(v),1)}</div></div>
       <div><div class="k">Fin estimée</div><div class="v">${e.txt}${e.clock?` <span class="vv">(${e.clock})</span>`:''}</div></div>
     </div>
-    ${(()=>{const E=estimate(v,s); if(!E) return ''; return `<div class="est"><b>Estimation en direct</b> : ≈ ${fmt(E.rem)} restant(s)${E.rem===0?' (terminé)':''} · ≈ ${E.pct==null?'—':fmt(E.pct,1)+' %'} d'avancement, soit −${fmt(E.mv)} mouvement(s) des grues du navire sur ${E.n} h depuis le rapport de shift de ${LT(s,{hour:'2-digit',minute:'2-digit'})} (heures jusqu'à ${esc(E.upto.to)}). Indicatif : à confirmer au prochain rapport de shift.</div>`;})()}
+    ${(()=>{const E=estimate(v,s); if(!E) return ''; if(E.unreliable) return `<div class="est" style="border-color:var(--warn);background:var(--warn-bg);color:var(--warn)"><b>Estimation non fiable</b> : les grues de ce navire ont fait ${fmt(E.mv)} mouvements depuis le rapport de shift de ${LT(s,{hour:'2-digit',minute:'2-digit'})} (rapports horaires jusqu'à ${esc(E.upto.to)}) pour ${fmt(v.rem)} restants à l'époque. Probable : grues réaffectées à un autre navire ou travail ajouté. Se fier au prochain rapport de shift.</div>`; return `<div class="est"><b>Estimation en direct</b> : ≈ ${fmt(E.rem)} restant(s)${E.rem===0?' (terminé)':''} · ≈ ${E.pct==null?'—':fmt(E.pct,1)+' %'} d'avancement, soit −${fmt(E.mv)} mouvement(s) des grues du navire sur ${E.n} h depuis le rapport de shift de ${LT(s,{hour:'2-digit',minute:'2-digit'})} (heures jusqu'à ${esc(E.upto.to)}). Indicatif : à confirmer au prochain rapport de shift.</div>`;})()}
     <div class="tw"><table><thead><tr><th>Grue</th><th class="r">Mvts</th><th class="r">Heures brutes</th><th class="r">GMPH</th></tr></thead><tbody>
     ${cr.map(c=>`<tr><td><b>${esc(c.id)}</b></td><td class="r num">${fmt(c.moves)}</td><td class="r num">${fmt(c.hours,2)}</td><td class="r num">${fmt(c.gmph,1)}<span class="gb" style="width:${Math.round(40*(c.gmph||0)/maxG)}px"></span></td></tr>`).join('')}
     </tbody></table></div>${skipped?`<div class="note">${skipped} poste${skipped>1?'s':''} à 0 mouvement ignoré${skipped>1?'s':''} (GMPH recalculé sur les postes actifs).</div>`:''}</article>`;
