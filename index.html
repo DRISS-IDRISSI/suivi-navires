@@ -302,6 +302,9 @@ function hourlyAlerts(){
     if(/LOW/i.test(c.status)&&(v.rem||0)>=(h.min||20)) out.push(['warn','Grue sous le minimum',`${c.id} (${v.name}) : ${c.moves} mouvements sur 60 min (minimum ${h.min}).`]);
     else if(/CHECK/i.test(c.status)&&working) out.push([idle2?'crit':'warn',idle2?'Grue à l\'arrêt':'Grue sans mouvement',`${c.id} (${v.name}) : 0 mouvement ${idle2?'depuis 2 heures':'sur la dernière heure'} alors qu'il reste ${fmt(v.rem)} mouvements. Confirmer l'affectation.`]);
   });
+  /* grues qui travaillent alors que leur navire (dernier rapport de shift) est termine : probablement un autre navire */
+  const by=new Map(); h.cranes.forEach(c=>{ const v=cv.get(c.id); if(v&&v.rem===0&&c.moves>0){ if(!by.has(v.name)) by.set(v.name,[]); by.get(v.name).push(c); } });
+  by.forEach((cs,name)=>out.push(['info','Grues sur navire terminé',`${cs.map(c=>c.id+' ('+c.moves+')').join(', ')} : mouvements sur la dernière heure alors que ${name} est terminé au dernier rapport de shift. Probablement affectées à un autre navire, qui apparaîtra au prochain rapport de shift. Les mouvements ne lui sont pas attribués.`]));
   return out;
 }
 function hourlySection(){
@@ -311,7 +314,7 @@ function hourlySection(){
   const cnt={ok:0,low:0,chk:0}; h.cranes.forEach(c=>{const k=stCls(c.status); if(cnt[k]!=null) cnt[k]++;});
   const rows=h.cranes.slice().sort((a,b)=>(b.moves-a.moves)).map(c=>{
     const v=cv.get(c.id), p=prev&&prev.cranes.find(x=>x.id===c.id), w=Math.min(100,Math.round(100*c.moves/(min*1.5)));
-    return `<tr><td><b>${esc(c.id)}</b></td><td>${v?esc(v.name):'<span class="vv">non affectée</span>'}</td><td class="r num">${fmt(c.moves)}<span class="mbw"><i class="mb" style="width:${w}%"></i></span></td><td>${v&&v.rem===0&&c.moves===0?'<span class="pill p-info">Navire terminé</span>':`<span class="pill ${stPill(c.status)}">${stLab(c.status)}</span>`}</td><td class="r num">${p?fmt(p.moves):'—'}</td></tr>`; }).join('');
+    return `<tr><td><b>${esc(c.id)}</b></td><td>${v?esc(v.name)+(v.rem===0?' <span class="vv">(terminé à 15:03 ?)</span>':''):'<span class="vv">non affectée</span>'}</td><td class="r num">${fmt(c.moves)}<span class="mbw"><i class="mb" style="width:${w}%"></i></span></td><td>${v&&v.rem===0&&c.moves===0?'<span class="pill p-info">Navire terminé</span>':v&&v.rem===0&&c.moves>0?'<span class="pill p-warn">Autre navire ?</span>':`<span class="pill ${stPill(c.status)}">${stLab(c.status)}</span>`}</td><td class="r num">${p?fmt(p.moves):'—'}</td></tr>`; }).join('');
   /* carte de chaleur : dernieres heures x grues (grues vues au moins une fois avec des mouvements) */
   const last=hours.slice(-12).reverse(), ids=[...new Set(last.flatMap(x=>x.cranes.map(c=>c.id)))].filter(id=>last.some(x=>x.cranes.some(c=>c.id===id&&c.moves>0))).sort();
   const hm=`<details class="dt"><summary>Historique heure par heure (12 dernières heures, grues ayant travaillé)</summary><div class="tw"><table class="hm"><thead><tr><th>Fenêtre</th>${ids.map(i=>`<th class="r">${esc(i)}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>
@@ -363,7 +366,8 @@ function render(){
   const al=alertsFor(s), pcol={crit:'p-crit',warn:'p-warn',info:'p-info'}, plab={crit:'Critique',warn:'Alerte',info:'Info'};
   app.innerHTML=`
   <div class="strip">
-    <div><div class="k">Navires en cours</div><div class="v">${s.vessels.length}</div></div>
+    <div><div class="k">Navires en cours</div><div class="v">${s.vessels.filter(v=>v.rem>0).length}</div></div>
+    <div><div class="k">Terminés, à clôturer</div><div class="v">${s.vessels.filter(v=>v.rem===0).length}</div></div>
     <div><div class="k">Mouvements restants</div><div class="v num">${fmt(tot.rem)}</div></div>
     <div><div class="k">Mouvements du shift</div><div class="v num">${fmt(tot.sh)}</div></div>
     <div><div class="k">Alertes</div><div class="v">${al.filter(a=>a[0]!=='info').length}</div></div>
@@ -372,7 +376,8 @@ function render(){
   <div class="alerts">${al.length?al.map(a=>`<div class="al"><span class="pill ${pcol[a[0]]}">${a[1]}</span><span>${esc(a[2])}</span></div>`).join(''):'<div class="al"><span class="pill p-good">RAS</span><span>Aucune anomalie détectée sur ce rapport.</span></div>'}</div>
   ${hourlySection()}
   <h2>Avancement par navire</h2>
-  <div class="grid">${s.vessels.map(v=>vesselCard(v,s)).join('')}</div>
+  <div class="grid">${s.vessels.filter(v=>v.rem>0).map(v=>vesselCard(v,s)).join('')||'<div class="empty" style="padding:18px">Aucun navire avec des mouvements restants.</div>'}</div>
+  ${s.vessels.some(v=>v.rem===0)?`<h2>Terminés · à clôturer dans N4</h2><div class="tw card" style="padding:8px 12px"><table><thead><tr><th>Navire</th><th>Escale</th><th>Phase N4</th><th class="r">Mouvements faits</th><th class="r">GMPH</th><th>Grues du shift</th></tr></thead><tbody>${s.vessels.filter(v=>v.rem===0).map(v=>`<tr><td><b>${esc(v.name)}</b></td><td class="num">${esc(v.visit)}</td><td><span class="pill p-warn">${esc(v.phase)}</span></td><td class="r num">${fmt(v.acc)}</td><td class="r num">${fmt(gm(v),1)}</td><td>${esc(act(v).map(c=>c.id).join(', ')||'—')}</td></tr>`).join('')}</tbody></table></div><p class="note">Restant à 0 mais phase toujours « WORKING » dans N4 : le rapport de shift continue de lister ces escales tant qu'elles ne sont pas clôturées dans N4. Une fois clôturées, elles disparaîtront du rapport.</p>`:''}
   ${escalesTable()}
   <h2>Historique</h2>
   <div class="ctrls" style="margin-bottom:10px">
@@ -481,7 +486,7 @@ function buildXlsx(s){
   escales().forEach(e=>es.push([e.name,e.visit,e.statut,when(e.first),when(e.last),e.acc,e.rem,r1(e.gmph),e.shifts]));
   const w5=XLSX.utils.aoa_to_sheet(es); w5['!cols']=[22,12,18,18,18,10,10,22,8].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w5,'Escales');
   if(hours.length){ const cv=craneVessel(), hh=[['Fenêtre début','Fenêtre fin','Grue','Navire (dernier rapport de shift)','Mouvements','Statut','Minimum/h']];
-    hours.forEach(h=>h.cranes.forEach(c=>{const v=cv.get(c.id); hh.push([when(lt(h)-HR),when(lt(h)),c.id,v?v.name:'',c.moves,c.status,h.min]);}));
+    hours.forEach(h=>h.cranes.forEach(c=>{const v=cv.get(c.id); hh.push([when(lt(h)-HR),when(lt(h)),c.id,v?(v.rem===0&&c.moves>0?v.name+' (terminé) - autre navire ?':v.name):'',c.moves,c.status,h.min]);}));
     const w6=XLSX.utils.aoa_to_sheet(hh); w6['!cols']=[18,18,8,26,12,16,10].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w6,'Grues horaires');
     const ht=[['Fenêtre début','Fenêtre fin','Total','Chargés','Déchargés','Autres']]; hours.forEach(h=>ht.push([when(lt(h)-HR),when(lt(h)),h.total,h.load,h.disch,h.other]));
     const w7=XLSX.utils.aoa_to_sheet(ht); w7['!cols']=[18,18,8,10,11,8].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w7,'Totaux horaires'); }
@@ -506,7 +511,7 @@ function buildPdf(s){
   d.autoTable({startY:y+3,head:[['Navire','Grue','Mouvements','Heures brutes','GMPH']],body:rows,headStyles:HEAD,styles:BODY,tableWidth:150,columnStyles:{2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}}});
   if(hours.length){ const h=lastHour(), cv=craneVessel(); y=d.lastAutoTable.finalY+8; if(y>150){d.addPage();y=16;}
     d.setFont('helvetica','bold'); d.setFontSize(11); d.text('Dernière heure ('+h.from+' - '+h.to+') : '+fmtP(h.total)+' mouvements ('+fmtP(h.load)+' charges, '+fmtP(h.disch)+' decharges)',14,y);
-    d.autoTable({startY:y+3,head:[['Grue','Navire','Mvts / 60 min','Statut']],body:h.cranes.map(c=>{const v=cv.get(c.id);return [c.id,v?v.name:'non affectee',fmtP(c.moves),stLab(c.status).replace('À','A')];}),headStyles:HEAD,styles:BODY,tableWidth:150,columnStyles:{2:{halign:'right'}}}); }
+    d.autoTable({startY:y+3,head:[['Grue','Navire','Mvts / 60 min','Statut']],body:h.cranes.map(c=>{const v=cv.get(c.id);return [c.id,v?(v.rem===0&&c.moves>0?v.name+' (termine) - autre navire ?':v.name):'non affectee',fmtP(c.moves),stLab(c.status).replace('À','A')];}),headStyles:HEAD,styles:BODY,tableWidth:150,columnStyles:{2:{halign:'right'}}}); }
   const al=alertsFor(s); y=d.lastAutoTable.finalY+8; if(y>180){d.addPage();y=16;}
   d.setFont('helvetica','bold'); d.setFontSize(11); d.text('Alertes',14,y);
   d.autoTable({startY:y+3,head:[['Niveau','Alerte']],body:al.length?al.map(a=>[a[0]==='crit'?'Critique':a[0]==='warn'?'Alerte':'Info',a[2]]):[['RAS','Aucune anomalie détectée.']],headStyles:HEAD,styles:BODY,columnStyles:{0:{cellWidth:24},1:{cellWidth:'auto'}}});
