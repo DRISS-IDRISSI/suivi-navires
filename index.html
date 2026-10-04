@@ -119,6 +119,7 @@ svg text{fill:var(--fg-2);font-family:var(--f-body);font-size:11px}
 
 <script>
 const $=s=>document.querySelector(s);
+const TZ='Africa/Casablanca';
 const fmt=(n,d=0)=>n==null||isNaN(n)?'—':Number(n).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const SERIES=['--s1','--s2','--s3','--s4','--s5','--s6'];
@@ -204,13 +205,13 @@ const pct=v=>{ const t=(v.acc||0)+(v.rem||0); return t?100*v.acc/t:null; };
 function eta(v,s){ const rate=act(v).reduce((a,c)=>a+(c.gmph||0),0);
   if(!v.rem) return {txt:'Terminé',h:0}; if(!rate) return {txt:'—',h:null};
   const h=v.rem/rate, t=new Date(s.ts+h*3600000), mm=Math.round(h*60);
-  return {h,txt:'≈ '+(mm>=60?Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0'):mm+' min'),clock:t.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}; }
+  return {h,txt:'≈ '+(mm>=60?Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0'):mm+' min'),clock:t.toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'})}; }
 function alertsFor(s){
   const out=[], p=prevOf(s);
   s.vessels.forEach(v=>{
     if(v.rem===0&&/WORKING/i.test(v.phase)) out.push(['info','Prêt à clôturer',`${v.name} : plus aucun mouvement restant, phase encore ${v.phase}. Confirmer la fin des opérations.`]);
     if(gm(v)!=null&&gm(v)<THR&&v.rem>0) out.push(['warn','GMPH faible',`${v.name} : ${fmt(gm(v),1)} GMPH global (seuil ${THR}).`]);
-    if(p){ const pv=p.vessels.find(x=>x.visit===v.visit); if(pv&&v.rem>0&&pv.rem===v.rem&&pv.acc===v.acc) out.push(['crit','Aucune progression',`${v.name} : restant et cumulé inchangés depuis le rapport de ${new Date(p.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}.`]); }
+    if(p){ const pv=p.vessels.find(x=>x.visit===v.visit); if(pv&&v.rem>0&&pv.rem===v.rem&&pv.acc===v.acc) out.push(['crit','Aucune progression',`${v.name} : restant et cumulé inchangés depuis le rapport de ${new Date(p.ts).toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'})}.`]); }
   });
   const rank={crit:0,warn:1,info:2}; return out.sort((a,b)=>rank[a[0]]-rank[b[0]]);
 }
@@ -219,11 +220,11 @@ function alertsFor(s){
 function render(){
   const on=!!session; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel'].forEach(q=>$(q).hidden=!on); $('#drop').hidden=!on;
   if(!on){ showLogin(); return; }
-  const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${new Date(s.ts).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
+  const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${new Date(s.ts).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
     app.innerHTML=`<div class="empty"><b>Aucun rapport pour l'instant</b>Importez le fichier Excel horaire. Le tableau de bord affichera l'avancement de chaque navire, la productivité des grues, les alertes et l'historique.</div>`; return; }
-  $('#sub').textContent=`Rapport du ${new Date(s.ts).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})} · ${s.shift} · ${s.window}`;
+  $('#sub').textContent=`Rapport du ${new Date(s.ts).toLocaleString('fr-FR',{timeZone:TZ,dateStyle:'short',timeStyle:'short'})} · ${s.shift} · ${s.window}`;
   const tot=s.vessels.reduce((a,v)=>({rem:a.rem+(v.rem||0),sh:a.sh+(v.shiftTotal||0),acc:a.acc+(v.acc||0)}),{rem:0,sh:0,acc:0});
   const al=alertsFor(s), pcol={crit:'p-crit',warn:'p-warn',info:'p-info'}, plab={crit:'Critique',warn:'Alerte',info:'Info'};
   app.innerHTML=`
@@ -246,7 +247,7 @@ function render(){
   </div>
   <div class="chart" id="chart"></div>
   <div class="tw card" style="padding:8px 12px"><table><thead><tr><th>Rapport</th><th>Shift</th>${vesselKeys().map(k=>`<th class="r">${esc(k.name)}<br>cumulé / restant</th>`).join('')}</tr></thead><tbody>
-  ${snaps.slice().reverse().map(sn=>`<tr><td class="num">${new Date(sn.ts).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(sn.shift)}</td>${vesselKeys().map(k=>{const v=sn.vessels.find(x=>x.visit===k.visit);return `<td class="r num">${v?fmt(v.acc)+' / '+fmt(v.rem):'—'}</td>`}).join('')}</tr>`).join('')}
+  ${snaps.slice().reverse().map(sn=>`<tr><td class="num">${new Date(sn.ts).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(sn.shift)}</td>${vesselKeys().map(k=>{const v=sn.vessels.find(x=>x.visit===k.visit);return `<td class="r num">${v?fmt(v.acc)+' / '+fmt(v.rem):'—'}</td>`}).join('')}</tr>`).join('')}
   </tbody></table></div>
   <p class="note">Avancement = cumulé / (cumulé + restant). L'heure de fin estimée applique le restant au GMPH cumulé des grues ayant travaillé : indicatif, hors aléas.</p>`;
   app.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{metric=b.dataset.m;render();});
@@ -292,7 +293,7 @@ function drawChart(){
   let g='';
   for(let y=0;y<=ymax;y+=step) g+=`<line x1="${L}" x2="${W-Rr}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--grid)"/><text x="${L-8}" y="${Y(y)+4}" text-anchor="end">${fmt(y)}</text>`;
   const every=Math.ceil(snaps.length/8);
-  snaps.forEach((s,i)=>{ if(i%every===0) g+=`<text x="${X(s.ts)}" y="${H-8}" text-anchor="middle">${new Date(s.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</text>`; });
+  snaps.forEach((s,i)=>{ if(i%every===0) g+=`<text x="${X(s.ts)}" y="${H-8}" text-anchor="middle">${new Date(s.ts).toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'})}</text>`; });
   const placed=[];
   pts.forEach(sr=>{ if(!sr.p.length) return;
     const d=sr.p.map((a,i)=>(i?'L':'M')+X(a.t).toFixed(1)+' '+Y(a.y).toFixed(1)).join(' ');
@@ -308,7 +309,7 @@ function drawChart(){
   hit.addEventListener('mousemove',ev=>{ const r=svg.getBoundingClientRect(), sx=(ev.clientX-r.left)*W/r.width;
     let best=snaps[0]; snaps.forEach(s=>{ if(Math.abs(X(s.ts)-sx)<Math.abs(X(best.ts)-sx)) best=s; });
     cx.setAttribute('x1',X(best.ts)); cx.setAttribute('x2',X(best.ts)); cx.setAttribute('visibility','visible');
-    tip.innerHTML=`<b>${new Date(best.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</b><br>`+best.vessels.map(v=>`${esc(v.name)} : ${fmt(val(v,metric),metric==='gmph'?1:0)}`).join('<br>');
+    tip.innerHTML=`<b>${new Date(best.ts).toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'})}</b><br>`+best.vessels.map(v=>`${esc(v.name)} : ${fmt(val(v,metric),metric==='gmph'?1:0)}`).join('<br>');
     tip.hidden=false; const br=box.getBoundingClientRect(); tip.style.left=Math.min(ev.clientX-br.left+14,br.width-170)+'px'; tip.style.top=(ev.clientY-br.top+10)+'px'; });
   hit.addEventListener('mouseleave',()=>{tip.hidden=true;cx.setAttribute('visibility','hidden');});
 }
@@ -317,8 +318,8 @@ function drawChart(){
 /* ---------- export ---------- */
 function fmtP(n,d=0){ if(n==null||isNaN(n)) return '-'; const [i,f]=Number(n).toFixed(d).split('.'); const g=i.replace(/\B(?=(\d{3})+(?!\d))/g,' '); return f?g+','+f:g; }
 function etaPlain(v,s){ const e=eta(v,s); return e.h==null?'-':e.h===0?'Termine':e.txt.replace('≈ ','~')+' ('+e.clock+')'; }
-const stamp=s=>{const d=new Date(s.ts),p=n=>String(n).padStart(2,'0');return ''+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes());};
-const when=ts=>new Date(ts).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(/[  ]/g,' ');
+const stamp=s=>{const f=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(s.ts)),g=t=>f.find(x=>x.type===t).value;return g('year')+g('month')+g('day')+'_'+g('hour')+g('minute');};
+const when=ts=>new Date(ts).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(/[  ]/g,' ');
 function saveFile(name,data){
   const type=name.endsWith('.pdf')?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type})); a.download=name; document.body.appendChild(a); a.click(); a.remove();
