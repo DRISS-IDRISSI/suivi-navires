@@ -1,6 +1,10 @@
 # Suivi des escales TC3
 
-Application web de suivi de l'avancement des mouvements par navire, alimentée chaque heure par le rapport Excel `REP_MM_END_SHIFT_ALL_WORKING_VESSELS`.
+Application web de suivi de l'avancement des mouvements par navire, alimentée par deux rapports Excel reçus par e-mail :
+- `REP_QUAY_CRANE_DELAYS` (.xls, **chaque heure**) : mouvements des 60 dernières minutes par grue, avec statut OK / LOW - ALERT / CHECK ASSIGN. (minimum 20 mouvements/heure). Table `hourly`.
+- `REP_MM_END_SHIFT_ALL_WORKING_VESSELS` (.xlsx, **fin de chaque shift**, 3 par jour) : avancement par navire (cumulé, restant, GMPH, grues). Table `snapshots`.
+
+Entre deux rapports de shift, l'application estime le restant de chaque navire = restant du dernier rapport de shift − mouvements horaires des grues de ce navire (affiché comme « estimation »).
 
 ```
 Outlook -> Power Automate -> Edge Function Supabase -> base Supabase -> application (GitHub Pages)
@@ -9,8 +13,8 @@ Outlook -> Power Automate -> Edge Function Supabase -> base Supabase -> applicat
 Contenu du dossier :
 - `index.html` : l'application (tableau de bord, alertes, historique, exports Excel et PDF, import manuel).
 - `config.js` : URL et clé publique de votre projet Supabase.
-- `supabase/schema.sql` : création de la table et des règles d'accès.
-- `supabase/functions/ingest-report/index.ts` : fonction qui reçoit le rapport et l'enregistre.
+- `supabase/schema.sql` : création des tables (`snapshots`, `hourly`) et des règles d'accès.
+- `supabase/functions/ingest-report/index.ts` : fonction qui reconnaît le type de rapport (d'après son contenu) et l'enregistre.
 
 ## 1. Supabase : base et comptes (10 min)
 
@@ -54,7 +58,7 @@ Créez un flux automatisé :
    - En-têtes : `x-api-key` = votre INGEST_KEY, `content-type` = `application/json`
    - Corps : `{"contentBase64": "@{items('Appliquer_à_chaque')?['contentBytes']}"}`
 
-Si Power Automate n'est pas disponible sur votre compte, importez le fichier à la main avec le bouton **Importer le rapport horaire** de l'application : le résultat est le même.
+Alternative retenue en production : la fonction `mailbox` lit la boîte Outlook elle-même (Microsoft Graph) toutes les 10 minutes et accepte les pièces jointes `REP_MM_END_SHIFT*.xlsx` et `REP_QUAY_CRANE_DELAYS*.xls(x)`. En secours, le bouton **Importer un rapport** de l'application accepte les deux types de fichiers.
 
 ## Règles métier
 

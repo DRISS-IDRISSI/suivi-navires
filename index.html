@@ -102,6 +102,14 @@ svg text{fill:var(--fg-2);font-family:var(--f-body);font-size:11px}
 .empty b{font-family:var(--f-display);font-size:22px;color:var(--fg);display:block;margin-bottom:6px;text-transform:uppercase}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:3px;z-index:9;max-width:90%}
 .note{color:var(--fg-3);font-size:12px;margin-top:8px}
+.est{margin-top:12px;padding:8px 10px;border:1px dashed var(--info);border-radius:3px;background:var(--info-bg);color:var(--info);font-size:13px}
+.est b{font-weight:600}
+.hm td.c{text-align:center;font-family:var(--f-mono);min-width:54px}
+.hm .ok{background:var(--good-bg);color:var(--good)}.hm .low{background:var(--crit-bg);color:var(--crit)}.hm .chk{background:var(--warn-bg);color:var(--warn)}.hm .na{color:var(--fg-3)}
+details.dt{margin-top:12px}details.dt>summary{cursor:pointer;color:var(--fg-2);font-size:13px}
+.mb{display:inline-block;height:8px;border-radius:1px;vertical-align:middle;margin-left:6px;background:var(--accent)}
+.mbw{display:inline-block;width:70px;height:8px;background:var(--track);border-radius:1px;vertical-align:middle;margin-left:8px;position:relative}
+.mbw .mb{margin:0;position:absolute;left:0;top:0}
 </style></head><body>
 <div class="wrap">
 <header class="top"><div class="top-in">
@@ -110,14 +118,14 @@ svg text{fill:var(--fg-2);font-family:var(--f-body);font-size:11px}
     <label for="snapSel" class="sub" style="margin:0">Rapport</label>
     <select id="snapSel" aria-label="Choisir un rapport"></select>
     <button type="button" id="btnOut" hidden>Déconnexion</button>
-    <button class="primary" id="btnImport" type="button">Importer le rapport horaire</button>
+    <button class="primary" id="btnImport" type="button">Importer un rapport</button>
     <button type="button" id="btnXlsx">Exporter Excel</button>
     <button type="button" id="btnPdf">Exporter PDF</button>
     <input id="file" type="file" accept=".xlsx,.xls" multiple hidden>
   </div>
 </div></header>
 
-<div class="drop" id="drop">Glissez ici le fichier Excel re&ccedil;u chaque heure (REP_MM_END_SHIFT&hellip;) ou utilisez le bouton. Chaque import s'ajoute &agrave; l'historique.</div>
+<div class="drop" id="drop">Import manuel (secours) : glissez ici le rapport horaire (REP_QUAY_CRANE_DELAYS&hellip;) ou le rapport de fin de shift (REP_MM_END_SHIFT&hellip;). En fonctionnement normal, les rapports arrivent seuls depuis la bo&icirc;te mail.</div>
 <div id="app"></div>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -125,10 +133,14 @@ svg text{fill:var(--fg-2);font-family:var(--f-body);font-size:11px}
 <script>
 const $=s=>document.querySelector(s);
 const TZ='Africa/Casablanca';
+/* L'identifiant d'un rapport (AAAAMMJJHHMM) est l'heure locale du Maroc lue dans l'en-tete du fichier :
+   on l'affiche telle quelle, sans dependre du fuseau ni de la base de fuseaux de l'ordinateur. */
+const lt=s=>{const i=String(s.id);return Date.UTC(+i.slice(0,4),+i.slice(4,6)-1,+i.slice(6,8),+i.slice(8,10),+i.slice(10,12));};
+const LT=(s,o)=>new Date(lt(s)).toLocaleString('fr-FR',{timeZone:'UTC',...o});
 const fmt=(n,d=0)=>n==null||isNaN(n)?'—':Number(n).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const SERIES=['--s1','--s2','--s3','--s4','--s5','--s6'];
-let snaps=[], sel=null, metric='rem', THR=10, IDLE_H=2, db=null;
+let snaps=[], hours=[], sel=null, metric='rem', THR=10, IDLE_H=2, db=null;
 
 /* ---------- parsing ---------- */
 function num(v){ if(typeof v==='number') return v; if(v==null) return null;
@@ -158,6 +170,34 @@ function parseWorkbook(wb){
   return {id,ts:gen.getTime(),shift,window:win,vessels};
 }
 
+/* rapport horaire REP_QUAY_CRANE_DELAYS (memes regles que la fonction ingest-report) */
+function casaToUtc(y,mo,d,h,mi){
+  const f=new Intl.DateTimeFormat('en-US',{timeZone:TZ,hourCycle:'h23',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric'});
+  const off=t=>{const p=f.formatToParts(new Date(t)),v=k=>+p.find(x=>x.type===k).value;return Date.UTC(v('year'),v('month')-1,v('day'),v('hour'),v('minute'))-t;};
+  const g=Date.UTC(y,mo,d,h,mi); let t=g-off(g); t=g-off(t); return t; }
+function isHourlyWb(wb){ return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}).some(l=>l.some(x=>/Hourly Quay-Crane/i.test(String(x)))); }
+function parseHourly(wb){
+  const R=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''});
+  let wr=-1,hr=-1,tr=-1,gen='';
+  R.forEach((r,i)=>{ const L=r.map(x=>String(x).trim());
+    if(wr<0&&L.some(x=>/^Rolling window/i.test(x))) wr=i;
+    if(tr<0&&L.some(x=>/^TOTAL VESSEL MOVES/i.test(x))) tr=i;
+    if(hr<0&&L.includes('CRANE')&&L.includes('MOVES')) hr=i;
+    const g=L.find(x=>/^Generated\s/i.test(x)); if(g) gen=g; });
+  if(wr<0||hr<0) throw new Error('Structure du rapport horaire non reconnue.');
+  const n=R[wr].filter(x=>typeof x==='number'); if(n.length<2) throw new Error('Fenêtre horaire introuvable.');
+  const P=sv=>{const d=new Date(Math.round((sv-25569)*1440)*60000);return {y:d.getUTCFullYear(),mo:d.getUTCMonth(),d:d.getUTCDate(),h:d.getUTCHours(),mi:d.getUTCMinutes()};};
+  const p2=x=>String(x).padStart(2,'0'), a=P(n[0]), b=P(n[1]);
+  const idx=nm=>R[hr].findIndex(x=>String(x).trim()===nm), cC=idx('CRANE'),cM=idx('MOVES'),cS=idx('STATUS');
+  let total=null,load=null,disch=null,other=null;
+  if(tr>=0){ const lab=R[tr],val=R[tr+1]||[],at=re=>{const c=lab.findIndex(x=>re.test(String(x)));return c<0?null:num(val[c]);};
+    total=at(/^TOTAL VESSEL MOVES/i);load=at(/^LOAD MOVES/i);disch=at(/^DISCHARGE MOVES/i);other=at(/^MISSING/i); }
+  const txt=R.flat().map(String).find(x=>/Minimum:\s*\d+/i.test(x))||''; const min=+((txt.match(/Minimum:\s*(\d+)/i)||[])[1]||20);
+  const cranes=[]; for(let k=hr+1;k<R.length;k++){ const c=String(R[k][cC]??'').trim(); if(!c||/\s/.test(c)) break; cranes.push({id:c,moves:num(R[k][cM])??0,status:String(R[k][cS]??'').trim()}); }
+  if(!cranes.length) throw new Error('Aucune grue dans le rapport horaire.');
+  return {id:`${b.y}${p2(b.mo+1)}${p2(b.d)}${p2(b.h)}${p2(b.mi)}`,ts:casaToUtc(b.y,b.mo,b.d,b.h,b.mi),from:`${p2(a.h)}:${p2(a.mi)}`,to:`${p2(b.h)}:${p2(b.mi)}`,min,total,load,disch,other,generated:gen.replace(/^Generated\s*/i,''),cranes};
+}
+
 /* ---------- storage (Supabase) ---------- */
 const cfg=window.APP_CONFIG||{};
 const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
@@ -167,9 +207,17 @@ function toast(t){ const e=$('#toast'); e.textContent=t; e.hidden=false; clearTi
 async function loadSnaps(){
   const {data,error}=await sb.from('snapshots').select('data').order('ts',{ascending:true});
   if(error){ toast('Lecture impossible : '+error.message); return; }
-  const sig=data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1));
+  /* rapports horaires (8 derniers jours) : si la table n'existe pas encore, l'application fonctionne sans */
+  const hr=await sb.from('hourly').select('data').order('ts',{ascending:false}).limit(200);
+  const hd=hr.error?[]:hr.data.map(r=>r.data).reverse();
+  const sig=data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'');
   if(sig===lastSig) return; lastSig=sig;
-  snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
+  hours=hd; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
+}
+async function saveHourly(h){
+  const {error}=await sb.from('hourly').upsert({id:h.id,ts:new Date(h.ts).toISOString(),data:h});
+  if(error){ toast('Enregistrement impossible : '+error.message); return false; }
+  lastSig=''; await loadSnaps(); return true;
 }
 async function saveSnap(s){
   const {error}=await sb.from('snapshots').upsert({id:s.id,ts:new Date(s.ts).toISOString(),shift:s.shift,data:s});
@@ -187,7 +235,9 @@ function showLogin(){
 /* ---------- import ---------- */
 async function importFiles(files){
   let ok=0; for(const f of files){
-    try{ const buf=await f.arrayBuffer(); const s=parseWorkbook(XLSX.read(buf,{type:'array'})); sel=s.id; await saveSnap(s); ok++; }
+    try{ const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
+      if(isHourlyWb(wb)){ if(await saveHourly(parseHourly(wb))) ok++; }
+      else { const s=parseWorkbook(wb); sel=s.id; await saveSnap(s); ok++; } }
     catch(e){ toast(f.name+' : '+e.message); }
   }
   if(ok){ toast(ok+' rapport'+(ok>1?'s':'')+' importé'+(ok>1?'s':'')); }
@@ -209,26 +259,80 @@ const prevOf=s=>{ const i=snaps.indexOf(s); return i>0?snaps[i-1]:null; };
 const pct=v=>{ const t=(v.acc||0)+(v.rem||0); return t?100*v.acc/t:null; };
 function eta(v,s){ const rate=act(v).reduce((a,c)=>a+(c.gmph||0),0);
   if(!v.rem) return {txt:'Terminé',h:0}; if(!rate) return {txt:'—',h:null};
-  const h=v.rem/rate, t=new Date(s.ts+h*3600000), mm=Math.round(h*60);
-  return {h,txt:'≈ '+(mm>=60?Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0'):mm+' min'),clock:t.toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'})}; }
+  const h=v.rem/rate, t=new Date(lt(s)+h*3600000), mm=Math.round(h*60);
+  return {h,txt:'≈ '+(mm>=60?Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0'):mm+' min'),clock:t.toLocaleTimeString('fr-FR',{timeZone:'UTC',hour:'2-digit',minute:'2-digit'})}; }
 function alertsFor(s){
   const out=[], p=prevOf(s);
   s.vessels.forEach(v=>{
     if(v.rem===0&&/WORKING/i.test(v.phase)) out.push(['info','Prêt à clôturer',`${v.name} : plus aucun mouvement restant, phase encore ${v.phase}. Confirmer la fin des opérations.`]);
     if(gm(v)!=null&&gm(v)<THR&&v.rem>0) out.push(['warn','GMPH faible',`${v.name} : ${fmt(gm(v),1)} GMPH global (seuil ${THR}).`]);
-    if(p){ const pv=p.vessels.find(x=>x.visit===v.visit); if(pv&&v.rem>0&&pv.rem===v.rem&&pv.acc===v.acc) out.push(['crit','Aucune progression',`${v.name} : restant et cumulé inchangés depuis le rapport de ${new Date(p.ts).toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'})}.`]); }
+    if(p){ const pv=p.vessels.find(x=>x.visit===v.visit); if(pv&&v.rem>0&&pv.rem===v.rem&&pv.acc===v.acc) out.push(['crit','Aucune progression',`${v.name} : restant et cumulé inchangés depuis le rapport de ${LT(p,{hour:'2-digit',minute:'2-digit'})}.`]); }
   });
+  if(s===lastSnap()) out.push(...hourlyAlerts());
   const rank={crit:0,warn:1,info:2}; return out.sort((a,b)=>rank[a[0]]-rank[b[0]]);
 }
 
+
+/* ---------- rapports horaires : grues, estimation, alertes ---------- */
+const lastSnap=()=>snaps[snaps.length-1], lastHour=()=>hours[hours.length-1];
+const HR=3600000, craneVessel=()=>{ const m=new Map(), l=lastSnap(); if(l) l.vessels.forEach(v=>v.cranes.forEach(c=>m.set(c.id,v))); return m; };
+const stCls=st=>/LOW/i.test(st)?'low':/CHECK/i.test(st)?'chk':/OK/i.test(st)?'ok':'na';
+const stPill=st=>/LOW/i.test(st)?'p-crit':/CHECK/i.test(st)?'p-warn':/OK/i.test(st)?'p-good':'p-info';
+const stLab=st=>/LOW/i.test(st)?'Faible':/CHECK/i.test(st)?'À vérifier':/OK/i.test(st)?'OK':st;
+const hTime=(h,o)=>LT(h,o||{hour:'2-digit',minute:'2-digit'});
+/* estimation : restant du dernier rapport de shift - mouvements horaires des grues du navire depuis ce rapport */
+function estimate(v,s){
+  if(s!==lastSnap()||!hours.length||!(v.rem>0)) return null;
+  const hs=hours.filter(h=>h.ts-HR>=s.ts-10*60000); if(!hs.length) return null;
+  const ids=new Set(v.cranes.map(c=>c.id));
+  const mv=hs.reduce((a,h)=>a+h.cranes.filter(c=>ids.has(c.id)).reduce((x,c)=>x+(c.moves||0),0),0);
+  const rem=Math.max(0,(v.rem||0)-mv), tot=(v.acc||0)+(v.rem||0), acc=tot-rem;
+  return {mv,rem,pct:tot?100*acc/tot:null,n:hs.length,upto:hs[hs.length-1]};
+}
+function hourlyAlerts(){
+  const out=[], h=lastHour(); if(!h) return out;
+  const age=(Date.now()-h.ts)/60000;
+  if(age>100) out.push(['warn','Rapport horaire en retard',`Dernier rapport horaire reçu : ${hTime(h,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} (fenêtre ${h.from}–${h.to}), il y a ${Math.round(age/60)} h. Vérifier l'arrivée des e-mails.`]);
+  const cv=craneVessel(), prev=hours[hours.length-2];
+  h.cranes.forEach(c=>{
+    const v=cv.get(c.id), working=v&&v.rem>0; if(!v) return; /* grue non affectée à un navire en cours : ignorée */
+    const p=prev&&prev.cranes.find(x=>x.id===c.id), idle2=c.moves===0&&p&&p.moves===0;
+    if(/LOW/i.test(c.status)) out.push(['warn','Grue sous le minimum',`${c.id} (${v.name}) : ${c.moves} mouvements sur 60 min (minimum ${h.min}).`]);
+    else if(/CHECK/i.test(c.status)&&working) out.push([idle2?'crit':'warn',idle2?'Grue à l\'arrêt':'Grue sans mouvement',`${c.id} (${v.name}) : 0 mouvement ${idle2?'depuis 2 heures':'sur la dernière heure'} alors qu'il reste ${fmt(v.rem)} mouvements. Confirmer l'affectation.`]);
+  });
+  return out;
+}
+function hourlySection(){
+  const h=lastHour();
+  if(!h) return `<h2>Dernière heure · grues</h2><div class="empty" style="padding:18px"><b style="font-size:18px">Pas encore de rapport horaire</b>Les rapports REP_QUAY_CRANE_DELAYS apparaîtront ici dès leur réception.</div>`;
+  const cv=craneVessel(), prev=hours[hours.length-2], min=h.min||20;
+  const cnt={ok:0,low:0,chk:0}; h.cranes.forEach(c=>{const k=stCls(c.status); if(cnt[k]!=null) cnt[k]++;});
+  const rows=h.cranes.slice().sort((a,b)=>(b.moves-a.moves)).map(c=>{
+    const v=cv.get(c.id), p=prev&&prev.cranes.find(x=>x.id===c.id), w=Math.min(100,Math.round(100*c.moves/(min*1.5)));
+    return `<tr><td><b>${esc(c.id)}</b></td><td>${v?esc(v.name):'<span class="vv">non affectée</span>'}</td><td class="r num">${fmt(c.moves)}<span class="mbw"><i class="mb" style="width:${w}%"></i></span></td><td>${v&&v.rem===0&&c.moves===0?'<span class="pill p-info">Navire terminé</span>':`<span class="pill ${stPill(c.status)}">${stLab(c.status)}</span>`}</td><td class="r num">${p?fmt(p.moves):'—'}</td></tr>`; }).join('');
+  /* carte de chaleur : dernieres heures x grues (grues vues au moins une fois avec des mouvements) */
+  const last=hours.slice(-12).reverse(), ids=[...new Set(last.flatMap(x=>x.cranes.map(c=>c.id)))].filter(id=>last.some(x=>x.cranes.some(c=>c.id===id&&c.moves>0))).sort();
+  const hm=`<details class="dt"><summary>Historique heure par heure (12 dernières heures, grues ayant travaillé)</summary><div class="tw"><table class="hm"><thead><tr><th>Fenêtre</th>${ids.map(i=>`<th class="r">${esc(i)}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>
+    ${last.map(x=>`<tr><td class="num">${esc(x.from)}–${esc(x.to)}${x.id.slice(0,8)!==h.id.slice(0,8)?' <span class="vv">'+x.id.slice(6,8)+'/'+x.id.slice(4,6)+'</span>':''}</td>${ids.map(i=>{const c=x.cranes.find(y=>y.id===i);return c?`<td class="c ${stCls(c.status)}">${fmt(c.moves)}</td>`:'<td class="c na">·</td>';}).join('')}<td class="r num"><b>${fmt(x.total)}</b></td></tr>`).join('')}
+    </tbody></table></div></details>`;
+  return `<h2>Dernière heure · grues <span class="vv" style="text-transform:none;letter-spacing:0">(fenêtre ${esc(h.from)} – ${esc(h.to)}, le ${hTime(h,{day:'2-digit',month:'2-digit'})})</span></h2>
+  <div class="strip">
+    <div><div class="k">Mouvements (60 min)</div><div class="v num">${fmt(h.total)}</div></div>
+    <div><div class="k">Chargés</div><div class="v num">${fmt(h.load)}</div></div>
+    <div><div class="k">Déchargés</div><div class="v num">${fmt(h.disch)}</div></div>
+    <div><div class="k">Grues OK / faibles / à vérifier</div><div class="v num">${cnt.ok} / ${cnt.low} / ${cnt.chk}</div></div>
+  </div>
+  <div class="tw card" style="padding:8px 12px;margin-top:0"><table><thead><tr><th>Grue</th><th>Navire</th><th class="r">Mvts / 60 min</th><th>Statut</th><th class="r">Heure précédente</th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${hm}<p class="note">Minimum attendu : ${min} mouvements par heure et par grue. « À vérifier » = aucun mouvement : confirmer l'affectation. Les grues non affectées à un navire en cours ne déclenchent pas d'alerte.</p>`;
+}
 
 /* ---------- escales (historique par escale, calcule a partir des rapports) ---------- */
 function escales(){
   const last=snaps[snaps.length-1], m=new Map(), lastOfShift=new Map();
   snaps.forEach(s=>lastOfShift.set((s.window||'')+'|'+s.shift,s)); /* dernier rapport de chaque shift : evite de compter deux fois les mouvements cumules du shift */
   snaps.forEach(s=>s.vessels.forEach(v=>{
-    let e=m.get(v.visit); if(!e){ e={visit:v.visit,name:v.name,first:s.ts,last:s.ts,acc:0,rem:null,mv:0,hrs:0,shifts:0}; m.set(v.visit,e); }
-    e.name=v.name; e.last=s.ts; e.acc=v.acc; e.rem=v.rem;
+    let e=m.get(v.visit); if(!e){ e={visit:v.visit,name:v.name,first:lt(s),last:lt(s),acc:0,rem:null,mv:0,hrs:0,shifts:0}; m.set(v.visit,e); }
+    e.name=v.name; e.last=lt(s); e.acc=v.acc; e.rem=v.rem;
   }));
   lastOfShift.forEach(s=>s.vessels.forEach(v=>{ const e=m.get(v.visit), a=act(v); if(!e||!a.length) return;
     e.shifts++; e.mv+=a.reduce((x,c)=>x+c.moves,0); e.hrs+=a.reduce((x,c)=>x+(c.hours||0),0); }));
@@ -238,7 +342,7 @@ function escales(){
 }
 function escalesTable(){
   const L=escales(), cls={'En cours':'p-info','Terminée':'p-good','Sortie du rapport':'p-warn'};
-  const d=t=>new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const d=t=>new Date(t).toLocaleString('fr-FR',{timeZone:'UTC',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   return `<h2>Escales suivies</h2><div class="tw card" style="padding:8px 12px"><table><thead><tr><th>Navire</th><th>Escale</th><th>Statut</th><th>Premier rapport</th><th>Dernier rapport</th><th class="r">Cumulé</th><th class="r">Restant</th><th class="r">GMPH moyen</th><th class="r">Shifts</th></tr></thead><tbody>
   ${L.map(e=>`<tr><td>${esc(e.name)}</td><td class="num">${esc(e.visit)}</td><td><span class="pill ${cls[e.statut]}">${e.statut}</span></td><td class="num">${d(e.first)}</td><td class="num">${d(e.last)}</td><td class="r num">${fmt(e.acc)}</td><td class="r num">${fmt(e.rem)}</td><td class="r num">${fmt(e.gmph,1)}</td><td class="r num">${e.shifts}</td></tr>`).join('')}
   </tbody></table></div><p class="note">Données calculées depuis le premier rapport importé. GMPH moyen = mouvements des postes actifs / heures de ces postes, sur le dernier rapport de chaque shift. « Sortie du rapport » : l'escale n'apparaît plus alors qu'il restait des mouvements.</p>`;
@@ -248,11 +352,11 @@ function escalesTable(){
 function render(){
   const on=!!session; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel'].forEach(q=>$(q).hidden=!on); $('#drop').hidden=!on;
   if(!on){ showLogin(); return; }
-  const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${new Date(s.ts).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
+  const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
-    app.innerHTML=`<div class="empty"><b>Aucun rapport pour l'instant</b>Importez le fichier Excel horaire. Le tableau de bord affichera l'avancement de chaque navire, la productivité des grues, les alertes et l'historique.</div>`; return; }
-  $('#sub').textContent=`Rapport du ${new Date(s.ts).toLocaleString('fr-FR',{timeZone:TZ,dateStyle:'short',timeStyle:'short'})} · ${s.shift} · ${s.window}`;
+    app.innerHTML=`<div class="empty"><b>Aucun rapport pour l'instant</b>Les rapports arrivent automatiquement depuis la boîte mail, ou importez un fichier. Le tableau de bord affichera l'avancement de chaque navire, la productivité des grues, les alertes et l'historique.</div>`; return; }
+  $('#sub').textContent=`Rapport du ${LT(s,{dateStyle:'short',timeStyle:'short'})} · ${s.shift} · ${s.window}`;
   const tot=s.vessels.reduce((a,v)=>({rem:a.rem+(v.rem||0),sh:a.sh+(v.shiftTotal||0),acc:a.acc+(v.acc||0)}),{rem:0,sh:0,acc:0});
   const al=alertsFor(s), pcol={crit:'p-crit',warn:'p-warn',info:'p-info'}, plab={crit:'Critique',warn:'Alerte',info:'Info'};
   app.innerHTML=`
@@ -264,6 +368,7 @@ function render(){
   </div>
   <h2>Alertes</h2>
   <div class="alerts">${al.length?al.map(a=>`<div class="al"><span class="pill ${pcol[a[0]]}">${a[1]}</span><span>${esc(a[2])}</span></div>`).join(''):'<div class="al"><span class="pill p-good">RAS</span><span>Aucune anomalie détectée sur ce rapport.</span></div>'}</div>
+  ${hourlySection()}
   <h2>Avancement par navire</h2>
   <div class="grid">${s.vessels.map(v=>vesselCard(v,s)).join('')}</div>
   ${escalesTable()}
@@ -276,9 +381,9 @@ function render(){
   </div>
   <div class="chart" id="chart"></div>
   <div class="tw card" style="padding:8px 12px"><table><thead><tr><th>Rapport</th><th>Shift</th>${vesselKeys().map(k=>`<th class="r">${esc(k.name)}<br>cumulé / restant</th>`).join('')}</tr></thead><tbody>
-  ${snaps.slice().reverse().map(sn=>`<tr><td class="num">${new Date(sn.ts).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(sn.shift)}</td>${vesselKeys().map(k=>{const v=sn.vessels.find(x=>x.visit===k.visit);return `<td class="r num">${v?fmt(v.acc)+' / '+fmt(v.rem):'—'}</td>`}).join('')}</tr>`).join('')}
+  ${snaps.slice().reverse().map(sn=>`<tr><td class="num">${LT(sn,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(sn.shift)}</td>${vesselKeys().map(k=>{const v=sn.vessels.find(x=>x.visit===k.visit);return `<td class="r num">${v?fmt(v.acc)+' / '+fmt(v.rem):'—'}</td>`}).join('')}</tr>`).join('')}
   </tbody></table></div>
-  <p class="note">Avancement = cumulé / (cumulé + restant). L'heure de fin estimée applique le restant au GMPH cumulé des grues ayant travaillé : indicatif, hors aléas.</p>`;
+  <p class="note">Avancement = cumulé / (cumulé + restant). L'heure de fin estimée applique le restant au GMPH cumulé des grues ayant travaillé : indicatif, hors aléas. L'avancement officiel vient des rapports de fin de shift (3 par jour) ; entre deux, l'estimation s'appuie sur les rapports horaires.</p>`;
   app.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{metric=b.dataset.m;render();});
   $('#thr').onchange=e=>{THR=+e.target.value||0;render();};
   drawChart();
@@ -304,6 +409,7 @@ function vesselCard(v,s){
       <div><div class="k">GMPH global</div><div class="v num">${fmt(gm(v),1)}</div></div>
       <div><div class="k">Fin estimée</div><div class="v">${e.txt}${e.clock?` <span class="vv">(${e.clock})</span>`:''}</div></div>
     </div>
+    ${(()=>{const E=estimate(v,s); if(!E) return ''; return `<div class="est"><b>Estimation en direct</b> : ≈ ${fmt(E.rem)} restant(s)${E.rem===0?' (terminé)':''} · ≈ ${E.pct==null?'—':fmt(E.pct,1)+' %'} d'avancement, soit −${fmt(E.mv)} mouvement(s) des grues du navire sur ${E.n} h depuis le rapport de shift de ${LT(s,{hour:'2-digit',minute:'2-digit'})} (heures jusqu'à ${esc(E.upto.to)}). Indicatif : à confirmer au prochain rapport de shift.</div>`;})()}
     <div class="tw"><table><thead><tr><th>Grue</th><th class="r">Mvts</th><th class="r">Heures brutes</th><th class="r">GMPH</th></tr></thead><tbody>
     ${cr.map(c=>`<tr><td><b>${esc(c.id)}</b></td><td class="r num">${fmt(c.moves)}</td><td class="r num">${fmt(c.hours,2)}</td><td class="r num">${fmt(c.gmph,1)}<span class="gb" style="width:${Math.round(40*(c.gmph||0)/maxG)}px"></span></td></tr>`).join('')}
     </tbody></table></div>${skipped?`<div class="note">${skipped} poste${skipped>1?'s':''} à 0 mouvement ignoré${skipped>1?'s':''} (GMPH recalculé sur les postes actifs).</div>`:''}</article>`;
@@ -322,7 +428,7 @@ function drawChart(){
   let g='';
   for(let y=0;y<=ymax;y+=step) g+=`<line x1="${L}" x2="${W-Rr}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--grid)"/><text x="${L-8}" y="${Y(y)+4}" text-anchor="end">${fmt(y)}</text>`;
   const every=Math.ceil(snaps.length/8);
-  snaps.forEach((s,i)=>{ if(i%every===0) g+=`<text x="${X(s.ts)}" y="${H-8}" text-anchor="middle">${new Date(s.ts).toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'})}</text>`; });
+  snaps.forEach((s,i)=>{ if(i%every===0) g+=`<text x="${X(s.ts)}" y="${H-8}" text-anchor="middle">${LT(s,{hour:'2-digit',minute:'2-digit'})}</text>`; });
   const placed=[];
   pts.forEach(sr=>{ if(!sr.p.length) return;
     const d=sr.p.map((a,i)=>(i?'L':'M')+X(a.t).toFixed(1)+' '+Y(a.y).toFixed(1)).join(' ');
@@ -338,7 +444,7 @@ function drawChart(){
   hit.addEventListener('mousemove',ev=>{ const r=svg.getBoundingClientRect(), sx=(ev.clientX-r.left)*W/r.width;
     let best=snaps[0]; snaps.forEach(s=>{ if(Math.abs(X(s.ts)-sx)<Math.abs(X(best.ts)-sx)) best=s; });
     cx.setAttribute('x1',X(best.ts)); cx.setAttribute('x2',X(best.ts)); cx.setAttribute('visibility','visible');
-    tip.innerHTML=`<b>${new Date(best.ts).toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'})}</b><br>`+best.vessels.map(v=>`${esc(v.name)} : ${fmt(val(v,metric),metric==='gmph'?1:0)}`).join('<br>');
+    tip.innerHTML=`<b>${LT(best,{hour:'2-digit',minute:'2-digit'})}</b><br>`+best.vessels.map(v=>`${esc(v.name)} : ${fmt(val(v,metric),metric==='gmph'?1:0)}`).join('<br>');
     tip.hidden=false; const br=box.getBoundingClientRect(); tip.style.left=Math.min(ev.clientX-br.left+14,br.width-170)+'px'; tip.style.top=(ev.clientY-br.top+10)+'px'; });
   hit.addEventListener('mouseleave',()=>{tip.hidden=true;cx.setAttribute('visibility','hidden');});
 }
@@ -347,8 +453,8 @@ function drawChart(){
 /* ---------- export ---------- */
 function fmtP(n,d=0){ if(n==null||isNaN(n)) return '-'; const [i,f]=Number(n).toFixed(d).split('.'); const g=i.replace(/\B(?=(\d{3})+(?!\d))/g,' '); return f?g+','+f:g; }
 function etaPlain(v,s){ const e=eta(v,s); return e.h==null?'-':e.h===0?'Termine':e.txt.replace('≈ ','~')+' ('+e.clock+')'; }
-const stamp=s=>{const f=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(s.ts)),g=t=>f.find(x=>x.type===t).value;return g('year')+g('month')+g('day')+'_'+g('hour')+g('minute');};
-const when=ts=>new Date(ts).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(/[  ]/g,' ');
+const stamp=s=>String(s.id).slice(0,8)+'_'+String(s.id).slice(8,12);
+const when=ms=>new Date(ms).toLocaleString('fr-FR',{timeZone:'UTC',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(/[  ]/g,' ');
 function saveFile(name,data){
   const type=name.endsWith('.pdf')?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type})); a.download=name; document.body.appendChild(a); a.click(); a.remove();
@@ -358,20 +464,25 @@ function buildXlsx(s){
   const wb=XLSX.utils.book_new(), r1=v=>v==null?null:Math.round(v*10)/10;
   const syn=[['Navire','Escale','Phase','Import shift','Export plein shift','Export vide shift','Restow shift','Total shift','Cumulé','Restant import','Restant export plein','Restant export vide','Restant total','Avancement %','GMPH (postes actifs)','Fin estimée']];
   s.vessels.forEach(v=>{ const p=pct(v); syn.push([v.name,v.visit,v.phase,v.imp,v.expF,v.expE,v.restow,v.shiftTotal,v.acc,v.remImp,v.remF,v.remE,v.rem,p==null?null:Math.round(p*10)/10,r1(gm(v)),etaPlain(v,s)]); });
-  const w1=XLSX.utils.aoa_to_sheet([['Suivi des escales TC3 - rapport du '+when(s.ts)+' - '+s.shift+' - '+s.window],[],...syn]);
+  const w1=XLSX.utils.aoa_to_sheet([['Suivi des escales TC3 - rapport du '+when(lt(s))+' - '+s.shift+' - '+s.window],[],...syn]);
   w1['!cols']=[22,12,10,11,14,14,11,10,10,13,16,16,13,13,16,18].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb,w1,'Synthèse');
   const cr=[['Navire','Grue','Mouvements shift','Heures brutes','GMPH']];
   s.vessels.forEach(v=>act(v).forEach(c=>cr.push([v.name,c.id,c.moves,c.hours,c.gmph])));
   const w2=XLSX.utils.aoa_to_sheet(cr); w2['!cols']=[22,10,16,14,10].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w2,'Grues actives');
   const hi=[['Rapport','Shift','Navire','Cumulé','Restant','GMPH (postes actifs)']];
-  snaps.forEach(sn=>sn.vessels.forEach(v=>hi.push([when(sn.ts),sn.shift,v.name,v.acc,v.rem,r1(gm(v))])));
+  snaps.forEach(sn=>sn.vessels.forEach(v=>hi.push([when(lt(sn)),sn.shift,v.name,v.acc,v.rem,r1(gm(v))])));
   const w3=XLSX.utils.aoa_to_sheet(hi); w3['!cols']=[18,24,22,10,10,18].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w3,'Historique');
   const al=[['Niveau','Alerte']]; alertsFor(s).forEach(a=>al.push([a[0]==='crit'?'Critique':a[0]==='warn'?'Alerte':'Info',a[2]]));
   const w4=XLSX.utils.aoa_to_sheet(al); w4['!cols']=[{wch:10},{wch:100}]; XLSX.utils.book_append_sheet(wb,w4,'Alertes');
   const es=[['Navire','Escale','Statut','Premier rapport','Dernier rapport','Cumulé','Restant','GMPH moyen (postes actifs)','Shifts']];
   escales().forEach(e=>es.push([e.name,e.visit,e.statut,when(e.first),when(e.last),e.acc,e.rem,r1(e.gmph),e.shifts]));
   const w5=XLSX.utils.aoa_to_sheet(es); w5['!cols']=[22,12,18,18,18,10,10,22,8].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w5,'Escales');
+  if(hours.length){ const cv=craneVessel(), hh=[['Fenêtre début','Fenêtre fin','Grue','Navire (dernier rapport de shift)','Mouvements','Statut','Minimum/h']];
+    hours.forEach(h=>h.cranes.forEach(c=>{const v=cv.get(c.id); hh.push([when(lt(h)-HR),when(lt(h)),c.id,v?v.name:'',c.moves,c.status,h.min]);}));
+    const w6=XLSX.utils.aoa_to_sheet(hh); w6['!cols']=[18,18,8,26,12,16,10].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w6,'Grues horaires');
+    const ht=[['Fenêtre début','Fenêtre fin','Total','Chargés','Déchargés','Autres']]; hours.forEach(h=>ht.push([when(lt(h)-HR),when(lt(h)),h.total,h.load,h.disch,h.other]));
+    const w7=XLSX.utils.aoa_to_sheet(ht); w7['!cols']=[18,18,8,10,11,8].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w7,'Totaux horaires'); }
   return XLSX.write(wb,{type:'array',bookType:'xlsx'});
 }
 function buildPdf(s){
@@ -379,7 +490,7 @@ function buildPdf(s){
   const HEAD={fillColor:[11,92,107],textColor:255,fontSize:8.5}, BODY={fontSize:8.5,cellPadding:2};
   d.setFont('helvetica','bold'); d.setFontSize(18); d.text('SUIVI DES ESCALES - TC3',14,16);
   d.setFont('helvetica','normal'); d.setFontSize(10); d.setTextColor(80);
-  d.text('Rapport du '+when(s.ts)+'  |  '+s.shift.replace(/\s+/g,' ')+'  |  '+s.window,14,22);
+  d.text('Rapport du '+when(lt(s))+'  |  '+s.shift.replace(/\s+/g,' ')+'  |  '+s.window,14,22);
   const tot=s.vessels.reduce((a,v)=>({rem:a.rem+(v.rem||0),sh:a.sh+(v.shiftTotal||0)}),{rem:0,sh:0});
   d.text(s.vessels.length+' navires en cours  |  '+fmtP(tot.rem)+' mouvements restants  |  '+fmtP(tot.sh)+' mouvements sur le shift',14,28);
   d.setTextColor(0);
@@ -391,11 +502,14 @@ function buildPdf(s){
   let y=d.lastAutoTable.finalY+8; d.setFont('helvetica','bold'); d.setFontSize(11); d.text('Grues actives (postes à 0 mouvement ignorés)',14,y);
   const rows=[]; s.vessels.forEach(v=>act(v).forEach(c=>rows.push([v.name,c.id,fmtP(c.moves),fmtP(c.hours,2),fmtP(c.gmph,1)])));
   d.autoTable({startY:y+3,head:[['Navire','Grue','Mouvements','Heures brutes','GMPH']],body:rows,headStyles:HEAD,styles:BODY,tableWidth:150,columnStyles:{2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}}});
+  if(hours.length){ const h=lastHour(), cv=craneVessel(); y=d.lastAutoTable.finalY+8; if(y>150){d.addPage();y=16;}
+    d.setFont('helvetica','bold'); d.setFontSize(11); d.text('Dernière heure ('+h.from+' - '+h.to+') : '+fmtP(h.total)+' mouvements ('+fmtP(h.load)+' charges, '+fmtP(h.disch)+' decharges)',14,y);
+    d.autoTable({startY:y+3,head:[['Grue','Navire','Mvts / 60 min','Statut']],body:h.cranes.map(c=>{const v=cv.get(c.id);return [c.id,v?v.name:'non affectee',fmtP(c.moves),stLab(c.status).replace('À','A')];}),headStyles:HEAD,styles:BODY,tableWidth:150,columnStyles:{2:{halign:'right'}}}); }
   const al=alertsFor(s); y=d.lastAutoTable.finalY+8; if(y>180){d.addPage();y=16;}
   d.setFont('helvetica','bold'); d.setFontSize(11); d.text('Alertes',14,y);
   d.autoTable({startY:y+3,head:[['Niveau','Alerte']],body:al.length?al.map(a=>[a[0]==='crit'?'Critique':a[0]==='warn'?'Alerte':'Info',a[2]]):[['RAS','Aucune anomalie détectée.']],headStyles:HEAD,styles:BODY,columnStyles:{0:{cellWidth:24},1:{cellWidth:'auto'}}});
   if(snaps.length>1){ const keys=vesselKeys(); d.addPage(); d.setFont('helvetica','bold'); d.setFontSize(11); d.text('Historique (cumulé / restant)',14,16);
-    d.autoTable({startY:19,head:[['Rapport','Shift',...keys.map(k=>k.name)]],body:snaps.slice().reverse().map(sn=>[when(sn.ts),sn.shift.replace(/\s+/g,' '),...keys.map(k=>{const v=sn.vessels.find(x=>x.visit===k.visit);return v?fmtP(v.acc)+' / '+fmtP(v.rem):'-';})]),headStyles:HEAD,styles:BODY}); }
+    d.autoTable({startY:19,head:[['Rapport','Shift',...keys.map(k=>k.name)]],body:snaps.slice().reverse().map(sn=>[when(lt(sn)),sn.shift.replace(/\s+/g,' '),...keys.map(k=>{const v=sn.vessels.find(x=>x.visit===k.visit);return v?fmtP(v.acc)+' / '+fmtP(v.rem):'-';})]),headStyles:HEAD,styles:BODY}); }
   const n=d.getNumberOfPages(); for(let i=1;i<=n;i++){ d.setPage(i); d.setFontSize(8); d.setTextColor(120); d.text('Marsa Maroc - TC3 - page '+i+'/'+n,14,205); }
   return d.output('arraybuffer');
 }
