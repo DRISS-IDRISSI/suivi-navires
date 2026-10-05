@@ -66,3 +66,11 @@ Alternative retenue en production : la fonction `mailbox` lit la boîte Outlook 
 - Avancement = cumulé / (cumulé + restant).
 - Fin estimée = restant / somme des GMPH des postes actifs.
 - Alertes : navire à 0 restant encore en phase WORKING, GMPH sous le seuil, aucune progression depuis le rapport précédent.
+
+
+## Version 4 : deux rubriques
+
+- **Pilotage** (vue manager) : situation des quais par terminal (TCE : PT05, PT08, PT09, PT10, PT11 ; TC3PC : STS1 à STS4) avec poste, navire, portiques affectés et avancement ; avancement détaillé par navire (import, export plein/vide, transbordement, panneaux, hors gabarits, shifting, débarquement/réembarquement) ; rendement de chaque portique par shift (S1, S2, S3).
+- **Analyse** : alertes, dernière heure par grue, estimations en direct, navires à clôturer, escales suivies, historique et courbes.
+- Le **poste** n'est pas dans les rapports actuels : il se saisit dans l'application (clic sur la cellule). Exécuter `supabase/escale_meta.sql` une fois pour le partager entre utilisateurs.
+- Les rubriques marquées « n/d » s'afficheront dès que les rapports les fourniront (voir le canevas Excel transmis à l'IT).
