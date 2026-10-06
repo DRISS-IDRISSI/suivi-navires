@@ -1,6 +1,7 @@
-// Edge Function "ingest-report" (v2) : reçoit un rapport Excel (base64) et l'enregistre.
+// Edge Function "ingest-report" (v3) : reçoit un rapport Excel (base64) et l'enregistre.
 //  - REP_MM_END_SHIFT (fin de shift, .xlsx)      -> table "snapshots"
 //  - REP_QUAY_CRANE_DELAYS (horaire, .xls/.xlsx) -> table "hourly"
+//  - REP_RTG_MOVES_HOURLY (horaire RTG, .xls)    -> table "rtg_hourly"
 // Le type est reconnu d'après le CONTENU du fichier (pas le nom).
 // Corps : { "contentBase64": "..." } ; en-tête obligatoire : x-api-key = secret INGEST_KEY
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -106,6 +107,49 @@ export function parseHourly(R: any[][]) {
   return { id, ts, from: hhmm(a), to: hhmm(b), min, total, load, disch, other, generated: gen.replace(/^Generated\s*/i, ""), cranes };
 }
 
+// ---------- Rapport horaire RTG (REP_RTG_MOVES_HOURLY) ----------
+// Deux blocs côte à côte (RTG01-07 à gauche, RTG08-14 à droite) : on lit chaque bloc.
+export function parseRtg(R: any[][]) {
+  let wr = -1, hr = -1, tr = -1, gen = "";
+  for (let r = 0; r < R.length; r++) {
+    const line = R[r].map((x) => String(x).trim());
+    if (wr < 0 && line.some((x) => /^Rolling window/i.test(x))) wr = r;
+    if (tr < 0 && line.some((x) => /^TOTAL RTG EVENTS/i.test(x))) tr = r;
+    if (hr < 0 && line.includes("RTG") && line.includes("MOVES") && line.includes("STATUS")) hr = r;
+    const g = line.find((x) => /^Generated\s/i.test(x));
+    if (g) gen = g;
+  }
+  if (wr < 0 || hr < 0) throw new Error("Structure du rapport RTG non reconnue.");
+  const nums = R[wr].filter((x) => typeof x === "number") as number[];
+  if (nums.length < 2) throw new Error("Fenêtre horaire RTG introuvable.");
+  const a = serialToParts(nums[0]), b = serialToParts(nums[1]);
+  const ts = casaToUtc(b.y, b.mo, b.d, b.h, b.mi);
+  const id = `${b.y}${pad(b.mo + 1)}${pad(b.d)}${pad(b.h)}${pad(b.mi)}`;
+  const H = R[hr].map((x) => String(x).trim());
+  const cols = (name: string) => H.map((x, i) => (x === name ? i : -1)).filter((i) => i >= 0);
+  const cR = cols("RTG"), cM = cols("MOVES"), cS = cols("STATUS");
+  const rtgs: any[] = [];
+  for (let k = hr + 1; k < R.length; k++) {
+    let any = false;
+    cR.forEach((c, j) => {
+      const idr = String(R[k][c] ?? "").trim();
+      if (/^RTG\w+$/i.test(idr)) { any = true; rtgs.push({ id: idr, moves: num(R[k][cM[j]]) ?? 0, status: String(R[k][cS[j]] ?? "").trim() }); }
+    });
+    if (!any) break;
+  }
+  if (!rtgs.length) throw new Error("Aucun RTG dans le rapport.");
+  rtgs.sort((x, y) => x.id.localeCompare(y.id));
+  let total = null, vessel = null, yard = null, gate = null;
+  if (tr >= 0) {
+    const labels = R[tr], vals = R[tr + 1] || [];
+    const at = (re: RegExp) => { const c = labels.findIndex((x: any) => re.test(String(x))); return c < 0 ? null : num(vals[c]); };
+    total = at(/^TOTAL RTG EVENTS/i); vessel = at(/^VESSEL RTG EVENTS/i); yard = at(/^YARD RTG EVENTS/i); gate = at(/^GATE/i);
+  }
+  const text = R.flat().map((x) => String(x)).find((x) => /Minimum:\s*\d+/i.test(x)) || "";
+  const min = +(text.match(/Minimum:\s*(\d+)/i)?.[1] ?? 15);
+  return { id, ts, from: hhmm(a), to: hhmm(b), min, total, vessel, yard, gate, generated: gen.replace(/^Generated\s*/i, ""), rtgs };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("POST uniquement", { status: 405 });
   if (req.headers.get("x-api-key") !== Deno.env.get("INGEST_KEY")) return new Response("Non autorisé", { status: 401 });
@@ -114,6 +158,12 @@ Deno.serve(async (req) => {
     const bytes = Uint8Array.from(atob(String(contentBase64).replace(/\s/g, "")), (c) => c.charCodeAt(0));
     const R = rowsOf(XLSX.read(bytes, { type: "array" }));
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    if (R.some((l) => l.some((x: any) => /Hourly RTG Moves/i.test(String(x))))) {
+      const g = parseRtg(R);
+      const { error } = await sb.from("rtg_hourly").upsert({ id: g.id, ts: new Date(g.ts).toISOString(), data: g });
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, type: "rtg", id: g.id, rtg: g.rtgs.length }), { headers: { "content-type": "application/json" } });
+    }
     const isHourly = R.some((l) => l.some((x: any) => /Hourly Quay-Crane/i.test(String(x))));
     if (isHourly) {
       const h = parseHourly(R);

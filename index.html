@@ -160,7 +160,7 @@ const fmt=(n,d=0)=>n==null||isNaN(n)?'—':Number(n).toLocaleString('fr-FR',{min
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const SERIES=['--s1','--s2','--s3','--s4','--s5','--s6'];
 let snaps=[], hours=[], sel=null, metric='rem', THR=10, IDLE_H=2, db=null;
-let tab='pilot', dayKey=null, GT=20, meta={};
+let tab='pilot', dayKey=null, GT=20, meta={}, rtgs=[];
 
 /* ---------- parsing ---------- */
 function num(v){ if(typeof v==='number') return v; if(v==null) return null;
@@ -218,6 +218,28 @@ function parseHourly(wb){
   return {id:`${b.y}${p2(b.mo+1)}${p2(b.d)}${p2(b.h)}${p2(b.mi)}`,ts:casaToUtc(b.y,b.mo,b.d,b.h,b.mi),from:`${p2(a.h)}:${p2(a.mi)}`,to:`${p2(b.h)}:${p2(b.mi)}`,min,total,load,disch,other,generated:gen.replace(/^Generated\s*/i,''),cranes};
 }
 
+/* rapport horaire RTG (REP_RTG_MOVES_HOURLY) : deux blocs RTG01-07 / RTG08-14 cote a cote (memes regles que ingest-report) */
+function isRtgWb(wb){ return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}).some(l=>l.some(x=>/Hourly RTG Moves/i.test(String(x)))); }
+function parseRtg(wb){
+  const R=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''});
+  let wr=-1,hr=-1,tr=-1,gen='';
+  R.forEach((r,i)=>{ const L=r.map(x=>String(x).trim());
+    if(wr<0&&L.some(x=>/^Rolling window/i.test(x))) wr=i;
+    if(tr<0&&L.some(x=>/^TOTAL RTG EVENTS/i.test(x))) tr=i;
+    if(hr<0&&L.includes('RTG')&&L.includes('MOVES')&&L.includes('STATUS')) hr=i;
+    const g=L.find(x=>/^Generated\s/i.test(x)); if(g) gen=g; });
+  if(wr<0||hr<0) throw new Error('Structure du rapport RTG non reconnue.');
+  const n=R[wr].filter(x=>typeof x==='number'); if(n.length<2) throw new Error('Fenêtre horaire RTG introuvable.');
+  const P=sv=>{const d=new Date(Math.round((sv-25569)*1440)*60000);return {y:d.getUTCFullYear(),mo:d.getUTCMonth(),d:d.getUTCDate(),h:d.getUTCHours(),mi:d.getUTCMinutes()};};
+  const p2=x=>String(x).padStart(2,'0'), a=P(n[0]), b=P(n[1]);
+  const H=R[hr].map(x=>String(x).trim()), cols=nm=>H.map((x,i)=>x===nm?i:-1).filter(i=>i>=0), cR=cols('RTG'),cM=cols('MOVES'),cS=cols('STATUS');
+  const list=[]; for(let k=hr+1;k<R.length;k++){ let any=false; cR.forEach((c,j)=>{ const id=String(R[k][c]??'').trim(); if(/^RTG\w+$/i.test(id)){ any=true; list.push({id,moves:num(R[k][cM[j]])??0,status:String(R[k][cS[j]]??'').trim()}); } }); if(!any) break; }
+  if(!list.length) throw new Error('Aucun RTG dans le rapport.'); list.sort((x,y)=>x.id.localeCompare(y.id));
+  let total=null,vessel=null,yard=null,gate=null; if(tr>=0){ const lab=R[tr],val=R[tr+1]||[],at=re=>{const c=lab.findIndex(x=>re.test(String(x)));return c<0?null:num(val[c]);}; total=at(/^TOTAL RTG EVENTS/i);vessel=at(/^VESSEL RTG EVENTS/i);yard=at(/^YARD RTG EVENTS/i);gate=at(/^GATE/i); }
+  const txt=R.flat().map(String).find(x=>/Minimum:\s*\d+/i.test(x))||''; const min=+((txt.match(/Minimum:\s*(\d+)/i)||[])[1]||15);
+  return {id:`${b.y}${p2(b.mo+1)}${p2(b.d)}${p2(b.h)}${p2(b.mi)}`,ts:casaToUtc(b.y,b.mo,b.d,b.h,b.mi),from:`${p2(a.h)}:${p2(a.mi)}`,to:`${p2(b.h)}:${p2(b.mi)}`,min,total,vessel,yard,gate,generated:gen.replace(/^Generated\s*/i,''),rtgs:list};
+}
+
 /* ---------- storage (Supabase) ---------- */
 const cfg=window.APP_CONFIG||{};
 const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
@@ -230,17 +252,24 @@ async function loadSnaps(){
   /* rapports horaires (8 derniers jours) : si la table n'existe pas encore, l'application fonctionne sans */
   const hr=await sb.from('hourly').select('data').order('ts',{ascending:false}).limit(200);
   const hd=hr.error?[]:hr.data.map(r=>r.data).reverse();
+  const rr=await sb.from('rtg_hourly').select('data').order('ts',{ascending:false}).limit(200);
+  const rd=rr.error?[]:rr.data.map(r=>r.data).reverse();
   /* postes a quai saisis par l'utilisateur (table escale_meta ; a defaut, memoire de cet appareil) */
   const mr=await sb.from('escale_meta').select('visit,poste'); let mt={};
   if(!mr.error) mr.data.forEach(r=>{ if(r.poste) mt[r.visit]=r.poste; }); else { try{ mt=JSON.parse(localStorage.getItem('postes')||'{}'); }catch(e){} }
   meta=mt;
-  const sig=JSON.stringify(meta)+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'');
+  const sig=JSON.stringify(meta)+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'');
   if(sig===lastSig) return; lastSig=sig;
-  hours=hd; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
+  hours=hd; rtgs=rd; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
 }
 async function saveHourly(h){
   const {error}=await sb.from('hourly').upsert({id:h.id,ts:new Date(h.ts).toISOString(),data:h});
   if(error){ toast('Enregistrement impossible : '+error.message); return false; }
+  lastSig=''; await loadSnaps(); return true;
+}
+async function saveRtg(g){
+  const {error}=await sb.from('rtg_hourly').upsert({id:g.id,ts:new Date(g.ts).toISOString(),data:g});
+  if(error){ toast('Enregistrement RTG impossible : '+error.message); return false; }
   lastSig=''; await loadSnaps(); return true;
 }
 async function saveSnap(s){
@@ -260,7 +289,8 @@ function showLogin(){
 async function importFiles(files){
   let ok=0; for(const f of files){
     try{ const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
-      if(isHourlyWb(wb)){ if(await saveHourly(parseHourly(wb))) ok++; }
+      if(isRtgWb(wb)){ if(await saveRtg(parseRtg(wb))) ok++; }
+      else if(isHourlyWb(wb)){ if(await saveHourly(parseHourly(wb))) ok++; }
       else { const s=parseWorkbook(wb); sel=s.id; await saveSnap(s); ok++; } }
     catch(e){ toast(f.name+' : '+e.message); }
   }
@@ -494,6 +524,47 @@ function matrixAoa(day){
   return A;
 }
 
+
+/* ---------- parc RTG ---------- */
+const lastRtg=()=>rtgs[rtgs.length-1];
+const rtgCls=st=>/LOW/i.test(st)?'low':/CHECK/i.test(st)?'chk':/OK/i.test(st)?'ok':'na';
+function rtgShifts(day){
+  const [y,m,d]=day.split('-').map(Number), base=Date.UTC(y,m-1,d), defs=[['S1',7],['S2',15],['S3',23]];
+  return defs.map(([c,h])=>{ const a=base+h*HR, w=rtgs.filter(x=>lt(x)>a&&lt(x)<=a+8*HR), per=new Map();
+    w.forEach(x=>x.rtgs.forEach(r=>per.set(r.id,(per.get(r.id)||0)+(r.moves||0))));
+    return {c,n:w.length,per,min:w.length?(w[w.length-1].min||15):15}; });
+}
+function rtgHtml(){
+  const g=lastRtg(); if(!g) return `<h2>Parc · RTG</h2><div class="empty" style="padding:18px"><b style="font-size:18px">Pas encore de rapport RTG</b>Les rapports REP_RTG_MOVES_HOURLY apparaîtront ici dès leur réception.</div>`;
+  const days=[...new Set(snaps.map(dayOf).filter(Boolean))].sort(); const day=dayKey&&days.includes(dayKey)?dayKey:(days.length?days[days.length-1]:null);
+  const prev=rtgs[rtgs.length-2], sh=day?rtgShifts(day):[], min=g.min||15;
+  const ids=g.rtgs.map(r=>r.id), cnt={ok:0,low:0,chk:0}; g.rtgs.forEach(r=>{const k=rtgCls(r.status); if(cnt[k]!=null) cnt[k]++;});
+  const cell=(e,n,mn)=>{ if(!n) return '<td class="z c">—</td>'; const avg=e/n, k=e===0?'z':avg>=mn?'g':'w'; return `<td class="c ${k} num"><b>${fmt(e)}</b><span class="vv">${fmt(avg,1)} / h · ${n}/8 h</span></td>`; };
+  const rows=g.rtgs.map(r=>{ const p=prev&&prev.rtgs.find(x=>x.id===r.id), tot=sh.reduce((a,x)=>a+(x.per.get(r.id)||0),0), th=sh.reduce((a,x)=>a+x.n,0);
+    return `<tr><td><b>${esc(r.id)}</b></td><td class="r num">${fmt(r.moves)}</td><td><span class="pill ${stPill(r.status)}">${stLab(r.status)}</span></td><td class="r num">${p?fmt(p.moves):'—'}</td>${sh.map(x=>cell(x.per.get(r.id)||0,x.n,x.min)).join('')}<td class="c num"><b>${fmt(tot)}</b>${th?'<span class="vv">'+fmt(tot/th,1)+' / h</span>':''}</td></tr>`; }).join('');
+  const tot=sh.map(x=>g.rtgs.reduce((a,r)=>a+(x.per.get(r.id)||0),0));
+  const late=(Date.now()-g.ts)/60000>100;
+  return `<h2>Parc · RTG <span class="vv" style="text-transform:none;letter-spacing:0">(fenêtre ${esc(g.from)} – ${esc(g.to)}, le ${hTime(g,{day:'2-digit',month:'2-digit'})})</span></h2>
+  ${late?`<div class="al" style="margin-bottom:8px"><span class="pill p-warn">Retard</span><span>Dernier rapport RTG reçu il y a plus de ${Math.round((Date.now()-g.ts)/3600000)} h : vérifier l'arrivée des e-mails.</span></div>`:''}
+  <div class="strip">
+    <div><div class="k">Mouvements RTG (60 min)</div><div class="v num">${fmt(g.total)}</div></div>
+    <div><div class="k">Côté navire</div><div class="v num">${fmt(g.vessel)}</div></div>
+    <div><div class="k">Côté parc</div><div class="v num">${fmt(g.yard)}</div></div>
+    <div><div class="k">Portail / autres</div><div class="v num">${fmt(g.gate)}</div></div>
+    <div><div class="k">RTG OK / faibles / à vérifier</div><div class="v num">${cnt.ok} / ${cnt.low} / ${cnt.chk}</div></div>
+  </div>
+  <div class="tw card" style="padding:4px 10px;margin-top:0"><table class="mx"><thead><tr><th>RTG</th><th class="r">Dernière heure</th><th>Statut</th><th class="r">Heure préc.</th>${sh.map(x=>`<th class="c">${x.c}${x.n?'':' · —'}<br><span style="text-transform:none;letter-spacing:0">mvts · moy./h</span></th>`).join('')}<th class="c">Journée</th></tr></thead><tbody>${rows}
+  <tr class="sub"><td>Total</td><td class="r num">${fmt(g.total)}</td><td></td><td class="r num">${prev?fmt(prev.total):'—'}</td>${tot.map((t,i)=>`<td class="c num">${sh[i].n?fmt(t):'—'}</td>`).join('')}<td class="c num">${fmt(tot.reduce((a,b)=>a+b,0))}</td></tr></tbody></table></div>
+  <p class="note">Minimum attendu : ${min} mouvements par heure et par RTG. Les shifts sont reconstitués en additionnant les rapports horaires (S1 07–15, S2 15–23, S3 23–07) ; « n/8 h » = nombre de rapports horaires reçus pour ce shift. Journée : ${day?dayLab(day):'—'} (même sélecteur que les portiques). Un RTG à 0 peut être simplement à l'arrêt ou affecté au portail : à confirmer sur le terrain.</p>`;
+}
+function rtgHeat(){
+  if(!rtgs.length) return '';
+  const last=rtgs.slice(-12).reverse(), ids=[...new Set(last.flatMap(x=>x.rtgs.map(r=>r.id)))].sort();
+  return `<h2>Parc · RTG, heure par heure</h2><div class="tw card" style="padding:4px 10px;margin-top:0"><table class="hm"><thead><tr><th>Fenêtre</th>${ids.map(i=>`<th class="r">${esc(i.replace('RTG',''))}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>
+  ${last.map(x=>`<tr><td class="num">${esc(x.from)}–${esc(x.to)}${x.id.slice(0,8)!==rtgs[rtgs.length-1].id.slice(0,8)?' <span class="vv">'+x.id.slice(6,8)+'/'+x.id.slice(4,6)+'</span>':''}</td>${ids.map(i=>{const r=x.rtgs.find(y=>y.id===i);return r?`<td class="c ${rtgCls(r.status)}">${fmt(r.moves)}</td>`:'<td class="c na">·</td>';}).join('')}<td class="r num"><b>${fmt(x.total)}</b></td></tr>`).join('')}
+  </tbody></table></div><p class="note">Colonnes : numéro du RTG. Vert = minimum atteint, rouge = sous le minimum, orange = aucun mouvement.</p>`;
+}
+
 /* ---------- render ---------- */
 function render(){
   const on=!!session; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel','#tabs'].forEach(q=>$(q).hidden=!on); $('#drop').hidden=!on||tab!=='ana';
@@ -519,7 +590,7 @@ function render(){
       quaysHtml(s)+
       `<h2>Avancement détaillé par navire</h2><div class="cards">${s.vessels.filter(v=>v.rem>0).map(v=>vesselCard(v,s)).join('')||'<div class="empty" style="padding:18px">Aucun navire avec des mouvements restants.</div>'}</div>
       <p class="note">Rubriques « n/d » : non fournies par les rapports actuels (demande en cours auprès de l'IT). Elles s'afficheront automatiquement dès réception.</p>`+
-      matrixHtml();
+      matrixHtml()+rtgHtml();
     app.querySelectorAll('.poste').forEach(e=>e.onclick=()=>setPoste(e.dataset.visit));
     const g=$('#goAna'); if(g) g.onclick=ev=>{ev.preventDefault();tab='ana';render();window.scrollTo(0,0);};
     const ds=$('#daySel'); if(ds) ds.onchange=e=>{dayKey=e.target.value;render();};
@@ -530,6 +601,7 @@ function render(){
   <h2>Alertes</h2>
   <div class="alerts">${al.length?al.map(a=>`<div class="al"><span class="pill ${pcol[a[0]]}">${a[1]}</span><span>${esc(a[2])}</span></div>`).join(''):'<div class="al"><span class="pill p-good">RAS</span><span>Aucune anomalie détectée sur ce rapport.</span></div>'}</div>
   ${hourlySection()}
+  ${rtgHeat()}
   <h2>Estimations en direct</h2>
   <div class="card" style="padding:12px 16px">${s.vessels.filter(v=>v.rem>0).map(v=>`<div style="margin:6px 0"><b>${esc(v.name)}</b> <span class="vv">restant au rapport de shift : ${fmt(v.rem)}</span><div style="margin-top:4px">${estHtml(v,s)}</div></div>`).join('')||'<span class="vv">Aucun navire en cours.</span>'}</div>
   ${s.vessels.some(v=>v.rem===0)?`<h2>Terminés · à clôturer dans N4</h2><div class="tw card" style="padding:8px 12px"><table><thead><tr><th>Navire</th><th>Escale</th><th>Phase N4</th><th class="r">Mouvements faits</th><th class="r">GMPH</th><th>Grues du shift</th></tr></thead><tbody>${s.vessels.filter(v=>v.rem===0).map(v=>`<tr><td><b>${esc(v.name)}</b></td><td class="num">${esc(v.visit)}</td><td><span class="pill p-warn">${esc(v.phase)}</span></td><td class="r num">${fmt(v.acc)}</td><td class="r num">${fmt(gm(v),1)}</td><td>${esc(act(v).map(c=>c.id).join(', ')||'—')}</td></tr>`).join('')}</tbody></table></div><p class="note">Restant à 0 mais phase toujours « WORKING » dans N4 : le rapport de shift continue de lister ces escales tant qu'elles ne sont pas clôturées dans N4. Une fois clôturées, elles disparaîtront du rapport.</p>`:''}
@@ -620,6 +692,7 @@ function buildXlsx(s){
   const es=[['Navire','Escale','Statut','Premier rapport','Dernier rapport','Cumulé','Restant','GMPH moyen (postes actifs)','Shifts']];
   escales().forEach(e=>es.push([e.name,e.visit,e.statut,when(e.first),when(e.last),e.acc,e.rem,r1(e.gmph),e.shifts]));
   const w5=XLSX.utils.aoa_to_sheet(es); w5['!cols']=[22,12,18,18,18,10,10,22,8].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w5,'Escales');
+  if(rtgs.length){ const rh=[['Fenêtre début','Fenêtre fin','RTG','Mouvements','Statut','Minimum/h']]; rtgs.forEach(g=>g.rtgs.forEach(r=>rh.push([when(lt(g)-HR),when(lt(g)),r.id,r.moves,r.status,g.min]))); const wr=XLSX.utils.aoa_to_sheet(rh); wr['!cols']=[18,18,8,12,16,10].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,wr,'RTG horaires'); }
   { const days=[...new Set(snaps.map(dayOf).filter(Boolean))].sort(); const ds=dayKey&&days.includes(dayKey)?dayKey:days[days.length-1]; if(ds){ const wm=XLSX.utils.aoa_to_sheet([['Rendement des portiques par shift - journée du '+dayLab(ds)],[],...matrixAoa(ds)]); wm['!cols']=[10,10,9,9,26,9,9,26,9,9,26,12,12].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,wm,'Rendement par shift'); } }
   if(hours.length){ const cv=craneVessel(), hh=[['Fenêtre début','Fenêtre fin','Grue','Navire (dernier rapport de shift)','Mouvements','Statut','Minimum/h']];
     hours.forEach(h=>h.cranes.forEach(c=>{const v=cv.get(c.id); hh.push([when(lt(h)-HR),when(lt(h)),c.id,v?(v.rem===0&&c.moves>0&&afterSnap(h)?v.name+' (terminé) - autre navire ?':v.name):'',c.moves,c.status,h.min]);}));
