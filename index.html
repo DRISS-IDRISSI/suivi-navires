@@ -319,10 +319,23 @@ function gm(v){ const a=act(v), h=a.reduce((s,c)=>s+(c.hours||0),0), m=a.reduce(
 const val=(v,k)=>k==='gmph'?gm(v):v[k];
 const cur=()=>snaps.find(s=>s.id===sel);
 const prevOf=s=>{ const i=snaps.indexOf(s); return i>0?snaps[i-1]:null; };
-const pct=v=>{ const t=(v.acc||0)+(v.rem||0); return t?100*v.acc/t:null; };
-function eta(v,s){ const rate=act(v).reduce((a,c)=>a+(c.gmph||0),0);
-  if(!v.rem) return {txt:'Terminé',h:0}; if(!rate) return {txt:'—',h:null};
-  const h=v.rem/rate, t=new Date(lt(s)+h*3600000), mm=Math.round(h*60);
+/* ---- mise a jour en continu : rapport de shift (base officielle) + mouvements des grues du navire dans les rapports horaires recus depuis ---- */
+let LV=new WeakMap();
+const ac=v=>{const l=LV.get(v);return l?l.acc:v.acc;}, rm=v=>{const l=LV.get(v);return l?l.rem:v.rem;};
+function liveCalc(){
+  LV=new WeakMap(); const s=lastSnap(); if(!s||!hours.length) return;
+  const hs=hours.filter(h=>h.ts-HR>=s.ts-10*60000); if(!hs.length) return;
+  const cv=craneVessel(s), upto=hs[hs.length-1], expected=Math.round((lt(upto)-Math.floor(lt(s)/HR)*HR)/HR), gaps=Math.max(0,expected-hs.length);
+  s.vessels.forEach(v=>{ if(!(v.rem>0)) return; const ids=new Set(v.cranes.filter(c=>cv.get(c.id)===v).map(c=>c.id)); if(!ids.size) return;
+    const mv=hs.reduce((a,h)=>a+h.cranes.filter(c=>ids.has(c.id)).reduce((x,c)=>x+(c.moves||0),0),0), tot=(v.acc||0)+(v.rem||0);
+    const unreliable=mv>v.rem+10, rem=unreliable?v.rem:Math.max(0,v.rem-mv);
+    const last=hs.slice(-2), rate=last.reduce((a,h)=>a+h.cranes.filter(c=>ids.has(c.id)).reduce((x,c)=>x+(c.moves||0),0),0)/last.length;
+    LV.set(v,{mv,n:hs.length,gaps,upto,unreliable,rem,acc:unreliable?v.acc:tot-rem,rate}); });
+}
+const pct=v=>{ const t=(v.acc||0)+(v.rem||0); return t?100*ac(v)/t:null; };
+function eta(v,s){ const L=LV.get(v), R=L&&!L.unreliable?L:null, rem=R?R.rem:v.rem, rate=R&&R.rate>0?R.rate:act(v).reduce((a,c)=>a+(c.gmph||0),0), base=R?lt(R.upto):lt(s);
+  if(!rem) return {txt:R?'Terminé (estimé)':'Terminé',h:0}; if(!rate) return {txt:'—',h:null};
+  const h=rem/rate, t=new Date(base+h*3600000), mm=Math.round(h*60);
   return {h,txt:'≈ '+(mm>=60?Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0'):mm+' min'),clock:t.toLocaleTimeString('fr-FR',{timeZone:'UTC',hour:'2-digit',minute:'2-digit'})}; }
 function alertsFor(s){
   const out=[], p=prevOf(s);
@@ -448,12 +461,12 @@ function quaysHtml(s){
       <td><b>${esc(v.name)}</b><div class="vv num">Escale ${esc(v.visit)}</div></td>
       <td>${chips(a,s)}</td>
       <td>${done?'<span class="pill p-warn">À clôturer</span>':`<span class="pb"><i style="width:${p||0}%"></i></span><b class="num">${p==null?'—':fmt(p,1)+' %'}</b>`}</td>
-      <td class="r num">${fmt(v.rem)}</td><td>${done?'—':esc(e.txt)+(e.clock?' <span class="vv">('+e.clock+')</span>':'')}</td></tr>`; }).join('')
+      <td class="r num">${fmt(rm(v))}</td><td>${done?'—':esc(e.txt)+(e.clock?' <span class="vv">('+e.clock+')</span>':'')}</td></tr>`; }).join('')
       :`<tr><td colspan="6" class="vv" style="padding:12px 8px">Aucun navire en cours sur ce terminal.</td></tr>`;
     return `<div class="term"><h3>${t==='Autre'?'Autres portiques':t} <span class="vv">${(TERM[t]||[]).join(' · ')}</span><span class="vv">· ${L.length} navire${L.length>1?'s':''} · ${fmt(rem)} mouvements restants${free.length?' · libres : '+free.join(', '):''}</span></h3>
       <div class="tw card" style="padding:4px 10px;margin-top:0"><table><thead><tr><th>Poste</th><th>Navire</th><th>Portiques affectés${lh?' <span class="hint" style="text-transform:none;letter-spacing:0">(mvts dernière heure)</span>':''}</th><th>Avancement</th><th class="r">Restant</th><th>Fin estimée</th></tr></thead><tbody>${rows}</tbody></table></div></div>`; };
   return `<h2>Situation des quais</h2>${panel('TCE')}${panel('TC3PC')}${panel('Autre')}
-  <p class="note">Poste : saisi par vous (clic sur la cellule), car les rapports actuels ne le contiennent pas. Portiques : affectation du dernier rapport de shift ; le chiffre à côté de chaque portique = mouvements de la dernière heure, coloré selon son statut horaire.</p>`;
+  <p class="note">Poste : saisi par vous (clic sur la cellule), car les rapports actuels ne le contiennent pas. Avancement et restant : rapport de shift + mouvements des grues des rapports horaires reçus depuis (mis à jour chaque heure, estimation) ; portiques : affectation du dernier rapport de shift ; le chiffre à côté de chaque portique = mouvements de la dernière heure, coloré selon son statut horaire.</p>`;
 }
 const ND='<span class="vv">n/d</span>';
 function catTable(v){
@@ -462,16 +475,23 @@ function catTable(v){
   R.push(['Export plein',v.expF,v.remF],['Export vide',v.expE,v.remE],['Transbordement IN',v.tsIn,v.remTsIn],['Transbordement OUT',v.tsOut,v.remTsOut],
     ['Panneaux (hatch covers)',v.hatch,v.remHatch],['Hors gabarits (OOG)',v.oog,v.remOog],['Shifting / restow',v.shifting!=null?v.shifting:v.restow,v.remShifting],
     ['Débarquement',v.landed,v.remLanded],['Réembarquement',v.reloaded,v.remReloaded]);
-  return `<div class="tw"><table class="cat"><thead><tr><th>Rubrique</th><th class="r">Réalisé (shift)</th><th class="r">Restant</th></tr></thead><tbody>
+  return `<div class="tw"><table class="cat"><thead><tr><th>Rubrique</th><th class="r">Réalisé (shift)</th><th class="r">Restant (au rapport de shift)</th></tr></thead><tbody>
   ${R.map(([l,a,b])=>`<tr class="${a==null&&b==null?'nd':''}"><td>${l}</td><td class="r num">${a==null?ND:fmt(a)}</td><td class="r num">${b==null?ND:fmt(b)}</td></tr>`).join('')}
-  <tr class="tot"><td>Total</td><td class="r num">${fmt(v.shiftTotal)}</td><td class="r num">${fmt(v.rem)}</td></tr></tbody></table></div>`;
+  <tr class="tot"><td>Total (rapport de shift)</td><td class="r num">${fmt(v.shiftTotal)}</td><td class="r num">${fmt(v.rem)}</td></tr>${(()=>{const L=LV.get(v); return L&&!L.unreliable?`<tr><td>+ depuis le rapport de shift (grues, heures suivantes)</td><td class="r num">+ ${fmt(L.mv)}</td><td class="r num">− ${fmt(L.mv)}</td></tr><tr class="tot"><td>Situation estimée à ${hTime(L.upto)}</td><td class="r num">${fmt((v.shiftTotal||0)+L.mv)}</td><td class="r num">${fmt(L.rem)}</td></tr>`:'';})()}</tbody></table></div>`;
+}
+function liveNote(v,s){
+  const L=LV.get(v); if(!L) return '';
+  const t=LT(s,{hour:'2-digit',minute:'2-digit'}), u=hTime(L.upto);
+  if(L.unreliable) return `<div class="est" style="margin-top:8px;border-color:var(--warn);background:var(--warn-bg);color:var(--warn)">Mise à jour horaire non appliquée : les grues de ce navire ont fait ${fmt(L.mv)} mouvements depuis le rapport de shift de ${t}, plus que le restant connu (${fmt(v.rem)}) — réaffectation probable. Chiffres du rapport de shift conservés jusqu'au prochain rapport.</div>`;
+  return `<div class="est" style="margin-top:8px">Mis à jour avec les rapports horaires jusqu'à <b>${u}</b> : rapport de shift de ${t} + <b>${fmt(L.mv)}</b> mouvement(s) des grues du navire sur ${L.n} h (estimation).${L.gaps?` <b>${L.gaps} fenêtre(s) horaire(s) manquante(s)</b> : valeur probablement sous-estimée.`:''}</div>`;
 }
 function vesselCard(v,s){
   const p=pct(v), e=eta(v,s), cv=craneVessel(s), a=asg(v,s,cv);
   return `<article class="card"><div class="ch"><div><div class="vn">${esc(v.name)}</div><div class="vv num">Escale ${esc(v.visit)} · ${vTerms(v,s,cv).join(' / ')} · <span class="poste" data-visit="${esc(v.visit)}">${poste(v)?'<b>'+esc(poste(v))+'</b>':'poste à renseigner ✎'}</span></div></div>
     <div style="text-align:right"><div class="pct num">${p==null?'—':fmt(p,1)+' %'}</div><span class="pill p-info">${esc(v.phase)}</span></div></div>
     <div class="bar" role="img" aria-label="Avancement ${p==null?'':fmt(p,1)} %"><i style="width:${p||0}%"></i></div>
-    <div class="bar-l"><span><b class="num">${fmt(v.acc)}</b> faits</span><span><b class="num">${fmt(v.rem)}</b> restants</span><span>Fin estimée : <b>${esc(e.txt)}</b>${e.clock?' <span class="vv">('+e.clock+')</span>':''}</span></div>
+    <div class="bar-l"><span><b class="num">${fmt(ac(v))}</b> faits</span><span><b class="num">${fmt(rm(v))}</b> restants</span><span>Fin estimée : <b>${esc(e.txt)}</b>${e.clock?' <span class="vv">('+e.clock+')</span>':''}</span></div>
+    ${liveNote(v,s)}
     <div style="margin-top:10px"><span class="k" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3)">Portiques affectés</span><div>${chips(a,s)}</div></div>
     ${catTable(v)}</article>`;
 }
@@ -673,11 +693,12 @@ function render(){
   document.querySelectorAll('#tabs [data-tab]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.tab===tab); b.onclick=()=>{tab=b.dataset.tab;render();window.scrollTo(0,0);}; });
   const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
   if(tab==='drv'){ renderDrv(); return; }
+  liveCalc();
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
     app.innerHTML=`<div class="empty"><b>Aucun rapport pour l'instant</b>Les rapports arrivent automatiquement depuis la boîte mail, ou importez un fichier. Le tableau de bord affichera les quais, l'avancement de chaque navire et le rendement des portiques.</div>`; return; }
-  $('#sub').textContent=`Rapport du ${LT(s,{dateStyle:'short',timeStyle:'short'})} · ${s.shift} · ${s.window}`;
-  const tot=s.vessels.reduce((a,v)=>({rem:a.rem+(v.rem||0),sh:a.sh+(v.shiftTotal||0),acc:a.acc+(v.acc||0)}),{rem:0,sh:0,acc:0});
+  { const lh=lastHour(); $('#sub').textContent=`Rapport de shift du ${LT(s,{dateStyle:'short',timeStyle:'short'})} · ${s.shift}`+(s===lastSnap()&&lh&&s.vessels.some(v=>LV.has(v))?` · mis à jour avec le rapport horaire de ${hTime(lh)}`:''); }
+  const tot=s.vessels.reduce((a,v)=>({rem:a.rem+(rm(v)||0),sh:a.sh+(v.shiftTotal||0),acc:a.acc+(ac(v)||0)}),{rem:0,sh:0,acc:0});
   const al=alertsFor(s), pcol={crit:'p-crit',warn:'p-warn',info:'p-info'}, plab={crit:'Critique',warn:'Alerte',info:'Info'};
   const strip=`<div class="strip">
     <div><div class="k">Navires en cours</div><div class="v">${s.vessels.filter(v=>v.rem>0).length}</div></div>
