@@ -142,7 +142,7 @@ details.dt{margin-top:12px}details.dt>summary{cursor:pointer;color:var(--fg-2);f
     <input id="file" type="file" accept=".xlsx,.xls" multiple hidden>
   </div>
 </div>
-<nav class="tabs" id="tabs" aria-label="Rubriques"><button type="button" data-tab="pilot">Pilotage</button><button type="button" data-tab="ana">Analyse</button></nav></header>
+<nav class="tabs" id="tabs" aria-label="Rubriques"><button type="button" data-tab="pilot">Pilotage</button><button type="button" data-tab="drv">Conducteurs</button><button type="button" data-tab="ana">Analyse</button></nav></header>
 
 <div class="drop" id="drop">Import manuel (secours) : glissez ici le rapport horaire (REP_QUAY_CRANE_DELAYS&hellip;) ou le rapport de fin de shift (REP_MM_END_SHIFT&hellip;). En fonctionnement normal, les rapports arrivent seuls depuis la bo&icirc;te mail.</div>
 <div id="app"></div>
@@ -160,7 +160,7 @@ const fmt=(n,d=0)=>n==null||isNaN(n)?'—':Number(n).toLocaleString('fr-FR',{min
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const SERIES=['--s1','--s2','--s3','--s4','--s5','--s6'];
 let snaps=[], hours=[], sel=null, metric='rem', THR=10, IDLE_H=2, db=null;
-let tab='pilot', dayKey=null, GT=20, meta={}, rtgs=[];
+let tab='pilot', dayKey=null, GT=20, meta={}, rtgs=[], drivers=[], drvKey=null, OBJ={rtg:15,sc:10}, SHF=40;
 
 /* ---------- parsing ---------- */
 function num(v){ if(typeof v==='number') return v; if(v==null) return null;
@@ -254,13 +254,16 @@ async function loadSnaps(){
   const hd=hr.error?[]:hr.data.map(r=>r.data).reverse();
   const rr=await sb.from('rtg_hourly').select('data').order('ts',{ascending:false}).limit(200);
   const rd=rr.error?[]:rr.data.map(r=>r.data).reverse();
+  /* mouvements par conducteur (1 ligne par shift) : si la table n'existe pas encore, l'application fonctionne sans */
+  const dr=await sb.from('driver_shift').select('data').order('ts',{ascending:false}).limit(30);
+  const dd=dr.error?[]:dr.data.map(r=>r.data).reverse();
   /* postes a quai saisis par l'utilisateur (table escale_meta ; a defaut, memoire de cet appareil) */
   const mr=await sb.from('escale_meta').select('visit,poste'); let mt={};
   if(!mr.error) mr.data.forEach(r=>{ if(r.poste) mt[r.visit]=r.poste; }); else { try{ mt=JSON.parse(localStorage.getItem('postes')||'{}'); }catch(e){} }
   meta=mt;
-  const sig=JSON.stringify(meta)+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'');
+  const sig=JSON.stringify(meta)+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
   if(sig===lastSig) return; lastSig=sig;
-  hours=hd; rtgs=rd; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
+  hours=hd; rtgs=rd; drivers=dd; if(!drvKey||!dd.some(x=>x.id===drvKey)) drvKey=dd.length?dd[dd.length-1].id:null; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
 }
 async function saveHourly(h){
   const {error}=await sb.from('hourly').upsert({id:h.id,ts:new Date(h.ts).toISOString(),data:h});
@@ -271,6 +274,11 @@ async function saveRtg(g){
   const {error}=await sb.from('rtg_hourly').upsert({id:g.id,ts:new Date(g.ts).toISOString(),data:g});
   if(error){ toast('Enregistrement RTG impossible : '+error.message); return false; }
   lastSig=''; await loadSnaps(); return true;
+}
+async function saveDrivers(d){
+  const {error}=await sb.from('driver_shift').upsert({id:d.id,ts:new Date(d.ts).toISOString(),data:d});
+  if(error){ toast('Enregistrement conducteurs impossible : '+error.message); return false; }
+  drvKey=d.id; lastSig=''; await loadSnaps(); return true;
 }
 async function saveSnap(s){
   const {error}=await sb.from('snapshots').upsert({id:s.id,ts:new Date(s.ts).toISOString(),shift:s.shift,data:s});
@@ -289,7 +297,8 @@ function showLogin(){
 async function importFiles(files){
   let ok=0; for(const f of files){
     try{ const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
-      if(isRtgWb(wb)){ if(await saveRtg(parseRtg(wb))) ok++; }
+      if(isDriverWb(wb)){ if(await saveDrivers(parseDrivers(wb))) ok++; }
+      else if(isRtgWb(wb)){ if(await saveRtg(parseRtg(wb))) ok++; }
       else if(isHourlyWb(wb)){ if(await saveHourly(parseHourly(wb))) ok++; }
       else { const s=parseWorkbook(wb); sel=s.id; await saveSnap(s); ok++; } }
     catch(e){ toast(f.name+' : '+e.message); }
@@ -565,12 +574,105 @@ function rtgHeat(){
   </tbody></table></div><p class="note">Colonnes : numéro du RTG. Vert = minimum atteint, rouge = sous le minimum, orange = aucun mouvement.</p>`;
 }
 
+
+/* ---------- conducteurs : rapport REP_LATESTSHIFTRTGSCECDRIVERMOVES (memes regles que ingest-report) ---------- */
+function isDriverWb(wb){ return !!(wb.Sheets.RTG||wb.Sheets.SC)&&['RTG','SC'].some(n=>wb.Sheets[n]&&XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''}).slice(0,4).some(l=>l.some(x=>/MOUVEMENTS EC EVENT PAR CONDUCTEUR/i.test(String(x))))); }
+function parseDrivers(wb){
+  const sheet=n=>wb.Sheets[n]?XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''}):[];
+  const rows=n=>{ const R=sheet(n), h=R.findIndex(r=>String(r[0]).trim()==='TYPE_ENGIN'); if(h<0) return {R,out:[]};
+    const H=R[h].map(x=>String(x).trim()), col=k=>H.indexOf(k), g=(r,k)=>{const v=r[col(k)]; return v===''||v==null?null:v;}, out=[];
+    for(let k=h+1;k<R.length;k++){ const r=R[k]; if(!String(r[0]).trim()) continue;
+      out.push({m:g(r,'MATRICULE'),n:g(r,'NOM'),p:g(r,'PRENOM'),l:g(r,'LOGIN'),e:g(r,'ENGIN'),li:g(r,'HEURE_LOGIN'),lo:g(r,'HEURE_LOGOUT'),dur:num(g(r,'DUREE_MIN')),st:g(r,'STATUT_SESSION'),ns:num(g(r,'NB_SESSIONS')),
+        in:num(g(r,'NOMBRE_IN'))??0,out:num(g(r,'NOMBRE_OUT'))??0,move:num(g(r,'NOMBRE_MOVE'))??0,shifting:num(g(r,'NOMBRE_SHIFTING'))??0,disch:num(g(r,'NOMBRE_DISCH'))??0,load:num(g(r,'NOMBRE_LOAD'))??0,other:num(g(r,'NOMBRE_AUTRE'))??0,total:num(g(r,'TOTAL_MVMT'))??0,fm:g(r,'PREMIER_MVMT'),lm:g(r,'DERNIER_MVMT')}); }
+    return {R,out}; };
+  const a=rows('RTG'), b=rows('SC'), head=String((a.R[1]||[])[0]??(b.R[1]||[])[0]??'');
+  const m=head.match(/SHIFT\s+(S\d)\s*>=\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}).*?<\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+  if(!m) throw new Error("En-tête du shift introuvable dans le rapport conducteurs.");
+  return {id:`${m[4]}${m[3]}${m[2]}${m[1]}`,ts:casaToUtc(+m[9],+m[8]-1,+m[7],+m[10],+m[11]),shift:m[1],start:`${m[4]}-${m[3]}-${m[2]} ${m[5]}:${m[6]}`,end:`${m[9]}-${m[8]}-${m[7]} ${m[10]}:${m[11]}`,rtg:a.out,sc:b.out};
+}
+const dts=s=>{const m=String(s||'').match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/); return m?Date.UTC(+m[3],+m[2]-1,+m[1],+m[4],+m[5]):null;};
+const hhmm=s=>{const m=String(s||'').match(/(\d{2}):(\d{2})/); return m?m[0]:'';};
+const dur=min=>min==null?'—':Math.floor(min/60)+'h'+String(Math.round(min%60)).padStart(2,'0');
+const tcase=s=>String(s||'').toLowerCase().replace(/(^|[\s-])(\p{L})/gu,(x,a,b)=>a+b.toUpperCase());
+/* une ligne par (conducteur, engin) dans le rapport : on regroupe par identifiant de connexion */
+function drvMerge(rows){
+  const mp=new Map();
+  rows.forEach(r=>{ const k=r.l||r.m||('?'+r.e); let o=mp.get(k);
+    if(!o){ o={key:k,login:r.l,m:r.m,n:r.n,p:r.p,engs:[],li:null,lo:null,open:false,dur:0,in:0,out:0,move:0,shifting:0,disch:0,load:0,other:0,total:0,noSess:true}; mp.set(k,o); }
+    if(r.e&&!o.engs.some(x=>x.e===r.e)) o.engs.push({e:r.e,t:0}); const eg=o.engs.find(x=>x.e===r.e); if(eg) eg.t+=r.total;
+    ['in','out','move','shifting','disch','load','other','total'].forEach(f=>o[f]+=r[f]||0);
+    const li=dts(r.li), lo=dts(r.lo); if(li!=null){ o.noSess=false; if(o.li==null||li<o.li) o.li=li; } if(lo!=null&&(o.lo==null||lo>o.lo)) o.lo=lo;
+    if(/OPEN/i.test(r.st||'')) o.open=true; o.dur=Math.max(o.dur,r.dur||0); if(!o.m&&r.m) o.m=r.m; if(!o.n&&r.n) o.n=r.n; if(!o.p&&r.p) o.p=r.p; });
+  return [...mp.values()].map(o=>{ o.engs.sort((a,b)=>b.t-a.t); o.h=o.dur/60; o.mph=o.dur>=60&&o.total>0?o.total/o.h:null; o.shp=o.total?o.shifting/o.total*100:0;
+    o.name=o.n&&o.p?`${tcase(o.n)} ${tcase(o.p)}`:(o.n&&o.n!==o.login?tcase(o.n):(o.login||'—')); return o; });
+}
+function drvSection(title,rows,obj,kind,d){
+  const L=drvMerge(rows), act=L.filter(o=>o.total>0).sort((a,b)=>b.total-a.total), idle=L.filter(o=>o.total===0&&!o.noSess).sort((a,b)=>b.dur-a.dur);
+  const tot=act.reduce((a,o)=>a+o.total,0), hs=act.reduce((a,o)=>a+o.h,0), sh=act.reduce((a,o)=>a+o.shifting,0), mx=Math.max(1,...act.map(o=>o.total));
+  const eng=new Map(); act.forEach(o=>o.engs.forEach(g=>{ const e=eng.get(g.e)||{e:g.e,t:0,dr:new Set()}; e.t+=g.t; if(g.t>0) e.dr.add(o.key); eng.set(g.e,e); }));
+  const strip=`<div class="strip"><div><div class="k">Mouvements</div><div class="v num">${fmt(tot)}</div></div><div><div class="k">Conducteurs actifs</div><div class="v">${act.length}</div></div>
+    <div><div class="k">Moyenne / conducteur</div><div class="v num">${act.length?fmt(tot/act.length):'—'}</div></div><div><div class="k">Mvts / h connectée</div><div class="v num">${hs?fmt(tot/hs,1):'—'}</div></div>
+    <div><div class="k">Shifting</div><div class="v num">${tot?fmt(sh/tot*100):'—'} %</div></div><div><div class="k">Engins ayant travaillé</div><div class="v">${[...eng.values()].filter(e=>e.t>0).length}</div></div></div>`;
+  const cell=(o)=>{ const lowC=o.mph!=null&&o.mph<obj*0.6?'low':o.mph!=null&&o.mph<obj?'chk':o.mph!=null?'ok':''; return lowC; };
+  const tr=act.map((o,i)=>`<tr><td class="num">${i+1}</td><td><b>${esc(o.name)}</b>${o.m?` <span class="vv">${esc(o.m)}</span>`:o.login?` <span class="vv">sans matricule${o.login&&o.login!==o.name?' · '+esc(o.login):''}</span>`:''}</td>
+    <td>${o.engs.map(g=>`<span class="chip">${esc(g.e)}</span>`).join('')}</td>
+    <td class="num">${o.li!=null?hhmm(new Date(o.li).toISOString().replace('T',' ')):'—'} → ${o.open?'<span class="vv">en cours</span>':o.lo!=null?hhmm(new Date(o.lo).toISOString().replace('T',' ')):'—'}</td>
+    <td class="r num">${dur(o.dur)}</td>
+    <td class="r num"><b>${fmt(o.total)}</b><span class="mbw"><span class="mb" style="width:${Math.round(o.total/mx*100)}%"></span></span></td>
+    <td class="r num ${cell(o)}">${o.mph==null?'—':fmt(o.mph,1)}</td>
+    <td class="r num">${fmt(o.disch)}</td><td class="r num">${fmt(o.load)}</td><td class="r num">${fmt(o.in)}</td><td class="r num">${fmt(o.out)}</td><td class="r num">${fmt(o.move)}</td>
+    <td class="r num ${o.shp>SHF&&o.total>=15?'chk':''}">${fmt(o.shifting)} <span class="vv">${fmt(o.shp)}%</span></td></tr>`).join('');
+  const em=[...eng.values()].filter(e=>e.t>0).sort((a,b)=>b.t-a.t);
+  const nsess=L.filter(o=>o.noSess&&o.total>0);
+  return `<h2>${title}</h2>${strip}
+  <div class="tw card hm" style="padding:6px 12px;margin-top:0"><table><thead><tr><th>#</th><th>Conducteur</th><th>Engin(s)</th><th>Connexion</th><th class="r">Connecté</th><th class="r">Total</th><th class="r">Mvts/h</th><th class="r">Déch.</th><th class="r">Charg.</th><th class="r">IN</th><th class="r">OUT</th><th class="r">Parc</th><th class="r">Shifting</th></tr></thead>
+  <tbody>${tr||'<tr><td colspan="13" class="vv">Aucun mouvement sur ce shift.</td></tr>'}</tbody></table></div>
+  <p class="note">Mvts/h = total ÷ durée de connexion (calculé à partir d'1 h de connexion). Vert ≥ objectif (${obj}/h), orange < objectif, rouge < 60 % de l'objectif. Shifting en orange au-delà de ${SHF} % des mouvements. Déch./Charg. = déchargement/chargement navire ; IN/OUT = porte ; Parc = déplacements de parc.</p>
+  ${nsess.length?`<p class="note">Mouvements sans session de connexion : ${nsess.map(o=>`${esc(o.name)} (${esc(o.engs.map(g=>g.e).join(', '))}) ${fmt(o.total)}`).join(' ; ')} — compte générique ou connexion absente du rapport, non attribuables à un conducteur.</p>`:''}
+  <details class="dt"><summary>Par engin (${em.length}) · ${kind==='rtg'?'RTG':'cavaliers'}</summary><div class="tw"><table><thead><tr><th>Engin</th><th class="r">Mouvements</th><th>Conducteur(s)</th></tr></thead><tbody>${em.map(e=>`<tr><td><b>${esc(e.e)}</b></td><td class="r num">${fmt(e.t)}</td><td>${[...e.dr].map(k=>{const o=L.find(x=>x.key===k);return esc(o?o.name:k);}).join(', ')}</td></tr>`).join('')}</tbody></table></div></details>
+  ${idle.length?`<details class="dt"><summary>Connectés sans mouvement (${idle.length})</summary><div class="tw"><table><thead><tr><th>Conducteur</th><th>Engin(s)</th><th>Connexion</th><th class="r">Connecté</th></tr></thead><tbody>${idle.map(o=>`<tr><td>${esc(o.name)} <span class="vv">${esc(o.m||'')}</span></td><td>${o.engs.map(g=>esc(g.e)).join(', ')}</td><td class="num">${o.li!=null?hhmm(new Date(o.li).toISOString().replace('T',' ')):'—'} → ${o.open?'en cours':o.lo!=null?hhmm(new Date(o.lo).toISOString().replace('T',' ')):'—'}</td><td class="r num">${dur(o.dur)}</td></tr>`).join('')}</tbody></table></div><p class="note">Souvent des sessions du shift précédent ou de relève (connexion avant ou autour de l'heure de changement de shift).</p></details>`:''}`;
+}
+/* points d'attention pour le responsable */
+function drvAlerts(d){
+  const out=[];
+  [['RTG',d.rtg,OBJ.rtg],['Cavaliers',d.sc,OBJ.sc]].forEach(([t,rows,obj])=>{
+    const L=drvMerge(rows).filter(o=>o.total>0);
+    L.filter(o=>o.mph!=null&&o.h>=2&&o.mph<obj*0.6).sort((a,b)=>a.mph-b.mph).forEach(o=>out.push(['warn',t,`${o.name} (${o.engs.map(g=>g.e).join(', ')}) : ${fmt(o.mph,1)} mvts/h sur ${dur(o.dur)} de connexion, objectif ${obj}/h.`]));
+    L.filter(o=>o.shp>SHF&&o.total>=15).sort((a,b)=>b.shp-a.shp).forEach(o=>out.push(['info',t,`${o.name} (${o.engs.map(g=>g.e).join(', ')}) : ${fmt(o.shp)} % de shifting (${fmt(o.shifting)} sur ${fmt(o.total)} mouvements).`]));
+    const idle=drvMerge(rows).filter(o=>o.total===0&&!o.noSess&&o.dur>=120); if(idle.length) out.push(['warn',t,`${idle.length} conducteur(s) connecté(s) plus de 2 h sans aucun mouvement : ${idle.map(o=>o.name+' ('+dur(o.dur)+')').join(', ')}.`]);
+  });
+  /* RTG ayant travaille mais absents du rapport horaire RTG sur ce shift (ex. RTG15/RTG16 non listes par le rapport horaire) */
+  const a=dts(d.start.replace(/(\d{4})-(\d{2})-(\d{2})/,'$3/$2/$1')), b=dts(d.end.replace(/(\d{4})-(\d{2})-(\d{2})/,'$3/$2/$1'));
+  const w=rtgs.filter(x=>lt(x)>a&&lt(x)<=b);
+  if(w.length){ const seen=new Set(w.flatMap(x=>x.rtgs.map(r=>r.id))); const miss=[...new Set(d.rtg.filter(r=>r.total>0&&r.e&&!seen.has(r.e)).map(r=>r.e))];
+    if(miss.length) out.push(['info','RTG',`${miss.join(', ')} ont travaillé sur ce shift mais ne figurent pas dans le rapport horaire RTG : leurs mouvements n'apparaissent donc pas dans le tableau « RTG heure par heure ». À signaler à l'IT.`]); }
+  return out;
+}
+function renderDrv(){
+  const app=$('#app');
+  if(!drivers.length){ $('#sub').textContent='Conducteurs : aucun rapport'; app.innerHTML=`<div class="empty"><b>Aucun rapport conducteurs pour l'instant</b>Le rapport « Mouvements par conducteur » (REP_LATESTSHIFTRTGSCECDRIVERMOVES…) arrive après chaque shift. Si la table n'est pas encore créée dans Supabase, lancez le script <i>driver_shift.sql</i>. Import manuel possible : glissez le fichier ci-dessus.</div>`; return; }
+  const d=drivers.find(x=>x.id===drvKey)||drivers[drivers.length-1];
+  $('#sub').textContent=`Conducteurs · shift ${d.shift} · ${d.start.slice(8,10)}/${d.start.slice(5,7)} ${d.start.slice(11)} → ${d.end.slice(8,10)}/${d.end.slice(5,7)} ${d.end.slice(11)}`;
+  const al=drvAlerts(d), pc={warn:'p-warn',info:'p-info'};
+  app.innerHTML=`<div class="ctrls" style="margin-bottom:12px"><label for="drvSel" class="sub" style="margin:0">Shift</label><select id="drvSel">${drivers.slice().reverse().map(x=>`<option value="${x.id}" ${x.id===d.id?'selected':''}>${x.start.slice(8,10)}/${x.start.slice(5,7)} · ${x.shift} (${x.start.slice(11)}–${x.end.slice(11)})</option>`).join('')}</select>
+    <label class="sub" style="margin:0 0 0 12px">Objectif RTG</label><input id="oRtg" type="number" min="1" max="60" value="${OBJ.rtg}" style="width:70px"><span class="vv">/h</span>
+    <label class="sub" style="margin:0 0 0 8px">Cavaliers</label><input id="oSc" type="number" min="1" max="60" value="${OBJ.sc}" style="width:70px"><span class="vv">/h</span>
+    <label class="sub" style="margin:0 0 0 8px">Alerte shifting</label><input id="oSh" type="number" min="5" max="95" value="${SHF}" style="width:70px"><span class="vv">%</span></div>
+  <h2 style="margin-top:6px">Points d'attention</h2><div class="alerts">${al.length?al.map(a=>`<div class="al"><span class="pill ${pc[a[0]]}">${esc(a[1])}</span><span>${esc(a[2])}</span></div>`).join(''):'<div class="al"><span class="pill p-good">RAS</span><span>Aucun écart notable sur ce shift.</span></div>'}</div>
+  ${drvSection('RTG · conducteurs',d.rtg,OBJ.rtg,'rtg',d)}${drvSection('Cavaliers (SC) · conducteurs',d.sc,OBJ.sc,'sc',d)}
+  <p class="note">Rapport généré après la fin de chaque shift (≈ 07 h 11 pour S3). Les chiffres sont ceux du système d'exploitation du terminal ; un conducteur connecté sur plusieurs engins est regroupé sur une seule ligne.</p>`;
+  $('#drvSel').onchange=e=>{drvKey=e.target.value;render();};
+  const nb=(id,f)=>{ const x=$(id); x.onchange=e=>{ f(+e.target.value||1); render(); }; };
+  nb('#oRtg',v=>OBJ.rtg=v); nb('#oSc',v=>OBJ.sc=v); nb('#oSh',v=>SHF=v);
+}
+
 /* ---------- render ---------- */
 function render(){
-  const on=!!session; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel','#tabs'].forEach(q=>$(q).hidden=!on); $('#drop').hidden=!on||tab!=='ana';
+  const on=!!session; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel','#tabs'].forEach(q=>$(q).hidden=!on); $('#drop').hidden=!on||(tab!=='ana'&&tab!=='drv');
   if(!on){ showLogin(); return; }
   document.querySelectorAll('#tabs [data-tab]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.tab===tab); b.onclick=()=>{tab=b.dataset.tab;render();window.scrollTo(0,0);}; });
   const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
+  if(tab==='drv'){ renderDrv(); return; }
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
     app.innerHTML=`<div class="empty"><b>Aucun rapport pour l'instant</b>Les rapports arrivent automatiquement depuis la boîte mail, ou importez un fichier. Le tableau de bord affichera les quais, l'avancement de chaque navire et le rendement des portiques.</div>`; return; }
@@ -692,6 +794,9 @@ function buildXlsx(s){
   const es=[['Navire','Escale','Statut','Premier rapport','Dernier rapport','Cumulé','Restant','GMPH moyen (postes actifs)','Shifts']];
   escales().forEach(e=>es.push([e.name,e.visit,e.statut,when(e.first),when(e.last),e.acc,e.rem,r1(e.gmph),e.shifts]));
   const w5=XLSX.utils.aoa_to_sheet(es); w5['!cols']=[22,12,18,18,18,10,10,22,8].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,w5,'Escales');
+  if(drivers.length){ const d=drivers.find(x=>x.id===drvKey)||drivers[drivers.length-1], dh=[['Shift','Type','Conducteur','Matricule','Login','Engin(s)','Connexion','Déconnexion','Connecté (min)','Total','Déch.','Charg.','IN','OUT','Parc','Shifting','Shifting %','Mvts/h']];
+    [['RTG',d.rtg],['SC',d.sc]].forEach(([t,rows])=>drvMerge(rows).sort((a,b)=>b.total-a.total).forEach(o=>dh.push([d.shift+' '+d.start.slice(0,10),t,o.name,o.m||'',o.login||'',o.engs.map(g=>g.e).join(', '),o.li!=null?when(o.li):'',o.open?'en cours':o.lo!=null?when(o.lo):'',Math.round(o.dur),o.total,o.disch,o.load,o.in,o.out,o.move,o.shifting,Math.round(o.shp),o.mph==null?'':Math.round(o.mph*10)/10])));
+    const wd=XLSX.utils.aoa_to_sheet(dh); wd['!cols']=[16,6,26,10,16,16,16,16,12,8,8,8,6,6,8,9,10,8].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,wd,'Conducteurs'); }
   if(rtgs.length){ const rh=[['Fenêtre début','Fenêtre fin','RTG','Mouvements','Statut','Minimum/h']]; rtgs.forEach(g=>g.rtgs.forEach(r=>rh.push([when(lt(g)-HR),when(lt(g)),r.id,r.moves,r.status,g.min]))); const wr=XLSX.utils.aoa_to_sheet(rh); wr['!cols']=[18,18,8,12,16,10].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,wr,'RTG horaires'); }
   { const days=[...new Set(snaps.map(dayOf).filter(Boolean))].sort(); const ds=dayKey&&days.includes(dayKey)?dayKey:days[days.length-1]; if(ds){ const wm=XLSX.utils.aoa_to_sheet([['Rendement des portiques par shift - journée du '+dayLab(ds)],[],...matrixAoa(ds)]); wm['!cols']=[10,10,9,9,26,9,9,26,9,9,26,12,12].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,wm,'Rendement par shift'); } }
   if(hours.length){ const cv=craneVessel(), hh=[['Fenêtre début','Fenêtre fin','Grue','Navire (dernier rapport de shift)','Mouvements','Statut','Minimum/h']];

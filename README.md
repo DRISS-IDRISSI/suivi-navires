@@ -74,3 +74,10 @@ Alternative retenue en production : la fonction `mailbox` lit la boîte Outlook 
 - **Analyse** : alertes, dernière heure par grue, estimations en direct, navires à clôturer, escales suivies, historique et courbes.
 - Le **poste** n'est pas dans les rapports actuels : il se saisit dans l'application (clic sur la cellule). Exécuter `supabase/escale_meta.sql` une fois pour le partager entre utilisateurs.
 - Les rubriques marquées « n/d » s'afficheront dès que les rapports les fourniront (voir le canevas Excel transmis à l'IT).
+
+## v5 — rubrique « Conducteurs »
+
+Nouvel onglet **Conducteurs** (réservé aux responsables) alimenté par le rapport `REP_LATESTSHIFTRTGSCECDRIVERMOVES…` reçu après chaque shift (~07 h 11, 15 h 11, 23 h 11) :
+classement des conducteurs RTG et cavaliers (nom, matricule, engins, connexion, mouvements, déchargement/chargement, IN/OUT, parc, shifting), mouvements par heure connectée, points d'attention (rendement faible, shifting élevé, connectés sans mouvement, RTG absents du rapport horaire), synthèse par engin, export Excel (feuille « Conducteurs »).
+
+Mise en service côté Supabase : exécuter `supabase/driver_shift.sql`, redéployer les fonctions `ingest-report` et `mailbox` (dossiers `supabase/functions/`). Seuils modifiables dans l'onglet (objectif RTG 15/h, cavaliers 10/h, alerte shifting 40 %).
