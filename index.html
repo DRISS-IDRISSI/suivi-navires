@@ -123,7 +123,11 @@ details.dt{margin-top:12px}details.dt>summary{cursor:pointer;color:var(--fg-2);f
 .pb i{display:block;height:100%;background:var(--accent)}
 .poste{cursor:pointer;min-width:84px;border-radius:2px}.poste:hover{background:var(--surface-2)}
 .cat td{padding:5px 8px}.cat tr.nd td{color:var(--fg-3)}.cat tr.tot td{font-weight:600;border-top:1px solid var(--line)}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr));gap:16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:12px}
+.cards .card{padding:12px 14px}.cards .vn{font-size:22px}.cards .pct{font-size:32px}.cards .bar{margin:8px 0 4px}
+.cards .est{margin-top:6px;padding:5px 8px;font-size:12px}.cards table.cat{font-size:12.5px;margin-top:8px}.cards .cat th{padding:3px 8px}.cards .cat td{padding:3px 8px}
+.cat td:first-child{white-space:normal}.cat tr.est2 td{background:var(--info-bg);color:var(--info)}
+.cards .bar-l{font-size:12px}
 .mx td{vertical-align:top}.mx td.g{background:var(--good-bg)}.mx td.w{background:var(--warn-bg)}.mx td.z{color:var(--fg-3)}
 .mx tr.sub td{font-weight:600;background:var(--surface-2)}.mx td .vv{display:block;white-space:normal;max-width:150px}
 .hint{font-size:12px;color:var(--fg-3)}
@@ -475,9 +479,13 @@ function catTable(v){
   R.push(['Export plein',v.expF,v.remF],['Export vide',v.expE,v.remE],['Transbordement IN',v.tsIn,v.remTsIn],['Transbordement OUT',v.tsOut,v.remTsOut],
     ['Panneaux (hatch covers)',v.hatch,v.remHatch],['Hors gabarits (OOG)',v.oog,v.remOog],['Shifting / restow',v.shifting!=null?v.shifting:v.restow,v.remShifting],
     ['Débarquement',v.landed,v.remLanded],['Réembarquement',v.reloaded,v.remReloaded]);
-  return `<div class="tw"><table class="cat"><thead><tr><th>Rubrique</th><th class="r">Réalisé (shift)</th><th class="r">Restant (au rapport de shift)</th></tr></thead><tbody>
-  ${R.map(([l,a,b])=>`<tr class="${a==null&&b==null?'nd':''}"><td>${l}</td><td class="r num">${a==null?ND:fmt(a)}</td><td class="r num">${b==null?ND:fmt(b)}</td></tr>`).join('')}
-  <tr class="tot"><td>Total (rapport de shift)</td><td class="r num">${fmt(v.shiftTotal)}</td><td class="r num">${fmt(v.rem)}</td></tr>${(()=>{const L=LV.get(v); return L&&!L.unreliable?`<tr><td>+ depuis le rapport de shift (grues, heures suivantes)</td><td class="r num">+ ${fmt(L.mv)}</td><td class="r num">− ${fmt(L.mv)}</td></tr><tr class="tot"><td>Situation estimée à ${hTime(L.upto)}</td><td class="r num">${fmt((v.shiftTotal||0)+L.mv)}</td><td class="r num">${fmt(L.rem)}</td></tr>`:'';})()}</tbody></table></div>`;
+  const have=R.filter(([l,a,b])=>a!=null||b!=null), nd=R.filter(([l,a,b])=>a==null&&b==null).map(r=>r[0]);
+  const L=LV.get(v), lv=L&&!L.unreliable?L:null;
+  return `<table class="cat"><thead><tr><th>Rubrique</th><th class="r">Réalisé</th><th class="r">Restant</th></tr></thead><tbody>
+  ${have.map(([l,a,b])=>`<tr><td>${l}</td><td class="r num">${a==null?ND:fmt(a)}</td><td class="r num">${b==null?ND:fmt(b)}</td></tr>`).join('')}
+  <tr class="tot"><td>Total rapport de shift</td><td class="r num">${fmt(v.shiftTotal)}</td><td class="r num">${fmt(v.rem)}</td></tr>
+  ${lv?`<tr><td>+ grues depuis le rapport</td><td class="r num">+ ${fmt(lv.mv)}</td><td class="r num">− ${fmt(lv.mv)}</td></tr><tr class="tot est2"><td>Situation estimée à ${hTime(lv.upto)}</td><td class="r num">${fmt((v.shiftTotal||0)+lv.mv)}</td><td class="r num">${fmt(lv.rem)}</td></tr>`:''}</tbody></table>
+  ${nd.length?`<div class="vv" style="margin-top:6px">Non fournis par les rapports actuels (demandés à l'IT) : ${nd.join(' · ')}</div>`:''}`;
 }
 function liveNote(v,s){
   const L=LV.get(v); if(!L) return '';
