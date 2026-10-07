@@ -139,3 +139,7 @@ Le dépassement toléré entre les mouvements des grues (rapports horaires) et l
 ## v7.7 — plus de « 100 % » estimé
 
 Un avancement de 100 % (ou « Terminé ») n'est affiché que lorsque le rapport de shift confirme 0 restant. Quand les grues ont fait au moins le restant du dernier rapport, le navire passe en « Fin imminente » : 99,9 % maximum, restant estimé à 0, encadré orange expliquant que la fin est à confirmer au prochain rapport de shift. Le tableau détaillé indique l'heure du rapport de shift dans « Total rapport de shift (hh:mm) » et « fin à confirmer » sur la ligne de situation estimée.
+
+## v7.8 — bibliothèques intégrées (plus de dépendance à un CDN)
+
+Les quatre bibliothèques (Supabase, SheetJS, jsPDF, autoTable) sont maintenant dans le dossier `lib/` de l'application au lieu d'être chargées depuis cdnjs et jsDelivr. Cela évite que la page reste figée sur l'écran de démarrage quand un de ces sites est inaccessible (APK, réseau d'entreprise, connexion lente) et permet l'ouverture hors connexion. Si un fichier manque malgré tout, un message rouge « Chargement impossible » s'affiche. Pensez à pousser le dossier `lib/` avec le reste. Seule la police Google Fonts reste externe (affichage de secours si elle est bloquée).

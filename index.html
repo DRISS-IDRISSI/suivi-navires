@@ -7,11 +7,12 @@
 <meta name="apple-mobile-web-app-title" content="Escales TC3">
 <link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/jspdf.umd.min.js"></script>
+<script src="lib/jspdf.plugin.autotable.min.js"></script>
+<script src="lib/supabase.min.js"></script>
 <script src="config.js"></script>
+<script>if(!window.supabase||!window.APP_CONFIG){ document.addEventListener('DOMContentLoaded',function(){ var d=document.createElement('div'); d.style.cssText='margin:16px;padding:14px;border:2px solid #b3261e;border-radius:6px;background:#fff;color:#b3261e;font:15px/1.4 sans-serif'; d.innerHTML='<b>Chargement impossible.</b> Les fichiers de l\'application n\'ont pas pu être lus (réseau coupé ou page ancienne en cache). Vérifiez la connexion puis rechargez la page.'; document.body.insertBefore(d,document.body.firstChild); }); }</script>
 <style>
 /* Layout: sticky harbour-signage header, status strip, alerts, vessel cards in a wrapping grid, history chart + table last. */
 :root{
