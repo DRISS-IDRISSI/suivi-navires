@@ -147,3 +147,8 @@ Les quatre bibliothèques (Supabase, SheetJS, jsPDF, autoTable) sont maintenant 
 ## v7.9 — onglet Direction (petit tableau de bord)
 
 Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction sur téléphone) : pour chaque portique du terminal choisi (TCE : PT05, PT08 à PT11 ; TC3 : STS1 à STS4) — statut (en opération si au moins un mouvement dans la dernière heure, à vérifier, à l'arrêt, inactif), navire servi, mouvements de la dernière heure, mouvements réalisés par shift S1 / S2 / S3 de la journée choisie (le shift en cours est complété avec les rapports horaires), rendement heure par heure sur les 12 dernières heures (vert ≥ objectif GMPH de 20, orange en dessous, rouge à zéro) et total du terminal par shift. Une bannière avertit si le dernier rapport horaire est ancien (> 100 min). Lien direct : `…/suivi-navires/#direction` (ajoutable à l'écran d'accueil ; l'application installée propose aussi le raccourci « Direction » par appui long sur l'icône).
+
+## v7.10 — Écran Direction (fusion TC3 + TCE, bleu/blanc)
+- L'écran **Direction** fusionne TC3 (STS1–STS4) et TCE (PT) sur une seule page, avec le même style bleu/blanc que l'accueil mobile.
+- N'affiche **que les portiques en opération** (au moins 1 mouvement sur le dernier rapport horaire) : mouvements de la dernière heure, S1/S2/S3 de la journée choisie, barres horaires, total par terminal.
+- Accès : menu ☰ → Direction (ou lien `#direction`). Retour : ☰ → Pilotage (escales).

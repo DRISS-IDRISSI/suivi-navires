@@ -136,21 +136,22 @@ details.dt{margin-top:12px}details.dt>summary{cursor:pointer;color:var(--fg-2);f
 
 /* ---- version telephone ---- */
 body.dirmode #snapSel,body.dirmode label[for=snapSel],body.dirmode #btnImport,body.dirmode #btnXlsx,body.dirmode #btnPdf{display:none!important}
-.dir-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:4px 0 12px}.dir-bar select{min-height:36px}
-.dir-note{font-size:13px;color:var(--fg-2);margin:0 0 10px}.dir-warn{background:var(--warn-bg);color:var(--warn);border-radius:4px;padding:8px 12px;margin-bottom:10px;font-size:14px}
-.dir-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
-.dcard{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
-.dcard .dh{display:flex;justify-content:space-between;align-items:center;gap:8px}.dcard .dh b{font-family:var(--f-display);font-size:26px;letter-spacing:.02em}
-.dcard .dv{font-size:13px;color:var(--fg-2);min-height:18px}
-.dbig{display:flex;align-items:baseline;gap:10px}.dbig strong{font-family:var(--f-display);font-size:44px;line-height:1}.dbig span{font-size:12px;color:var(--fg-2)}
-.dbig.g strong{color:var(--good)}.dbig.w strong{color:var(--warn)}.dbig.c strong{color:var(--crit)}.dbig.n strong{color:var(--fg-3)}
-.dsh{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.dsh div{background:var(--surface-2);border-radius:4px;padding:6px 8px;text-align:center}
-.dsh i{display:block;font-style:normal;font-size:11px;color:var(--fg-2)}.dsh b{font-family:var(--f-mono);font-size:18px}.dsh .lv{outline:2px solid var(--info);outline-offset:-2px}
-.dhrs{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;align-items:end;height:84px}
-.dhrs div{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
-.dhrs i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--fg-3);min-height:2px}.dhrs .g i{background:var(--good)}.dhrs .w i{background:var(--warn)}.dhrs .c i{background:var(--crit)}
-.dhrs b{font-family:var(--f-mono);font-size:10px;font-weight:500}.dhrs u{text-decoration:none;font-size:9px;color:var(--fg-3)}
-.dtot{margin-top:12px}.dtot .dsh{grid-template-columns:repeat(4,1fr)}
+.d-grid{display:grid;grid-template-columns:1fr;gap:10px}
+.d-card{border:2px solid var(--nv);border-radius:18px;padding:10px 12px;background:#fff;color:#1f3a6e}
+.d-h{display:flex;align-items:center;gap:10px}.d-h svg{width:26px;height:26px;stroke:var(--nv);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.d-n{flex:1;min-width:0}.d-n b{display:block;font-size:20px;line-height:1.1;text-transform:uppercase}.d-n span{display:block;font-size:12.5px;color:#6b7c93;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d-v{text-align:right;line-height:1}.d-v strong{display:block;font-size:34px;font-family:var(--f-display)}.d-v small{font-size:10.5px;color:#6b7c93}
+.d-v.g strong{color:#12805c}.d-v.w strong{color:#a86a00}.d-v.c strong{color:#b3261e}.d-v.n strong{color:#9aa8bb}
+.d-st{font-size:11px;border-radius:6px;padding:2px 7px;font-weight:600;margin-left:6px;vertical-align:middle;font-style:normal;background:#e1ebf8;color:#245fa8}.d-st.g{background:#e0f3ec;color:#12805c}.d-st.w{background:#fbefd6;color:#a86a00}.d-st.c{background:#fbe3e1;color:#b3261e}
+.d-sh{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0 6px}.d-sh div{background:#f3f6f9;border-radius:10px;padding:5px 4px;text-align:center}
+.d-sh span{display:block;font-size:10.5px;color:#6b7c93}.d-sh b{font-size:17px}.d-sh .lv{background:#e1ebf8;outline:2px solid #7fc0ff;outline-offset:-2px}
+.d-hr{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;align-items:end;height:62px}
+.d-hr div{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.d-hr i{display:block;width:100%;border-radius:3px 3px 0 0;background:#b9c6d6;min-height:2px}.d-hr .g i{background:#2fa37b}.d-hr .w i{background:#e0a030}.d-hr .c i{background:#e0564c}
+.d-hr b{font-size:9.5px;font-weight:600;line-height:1.2}.d-hr u{text-decoration:none;font-size:8.5px;color:#7a8aa0}
+.d-tot{background:var(--bg2);border-radius:14px;padding:8px 10px;margin:2px 0 10px}.d-tot .m-two{margin-top:2px}
+.d-warn{background:#fbefd6;color:#a86a00;border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:13.5px}
+@media(min-width:760px){body.dirwide .wrap{max-width:900px}.d-grid{grid-template-columns:1fr 1fr}.m-kpi{grid-template-columns:repeat(3,1fr)}}
 body.mobpilot header.top,body.mobpilot #drop{display:none}
 body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 .m{--nv:#1f3a6e;--bl:#3b82c4;--bg2:#e8eef3;--ln:#1f3a6e;color:#1f3a6e;font-family:var(--f-body)}
@@ -817,10 +818,10 @@ const IC={
   sh:'<svg viewBox="0 0 24 24"><path d="M5 9a7 7 0 0112-3l2 2M19 15a7 7 0 01-12 3l-2-2M19 4v4h-4M5 20v-4h4"/></svg>',
   pan:'<svg viewBox="0 0 24 24"><path d="M5 5h14v4H5zM8 9v11M16 9v11M5 14h14"/></svg>',
 };
-function mTop(title,sub,back){
+function mTop(title,sub,back,noChip){
   return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
-    <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div><button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TC3':termSel()}${myTerms().length>1?' ⇄':''}</button></div>
-  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button><button type="button" data-m="dir">Direction</button>${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="full">Version complète (ordinateur)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
+    <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div>${noChip?'<span style="width:44px"></span>':`<button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TC3':termSel()}${myTerms().length>1?' ⇄':''}</button>`}</div>
+  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab==='dir'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':'<button type="button" data-m="dir">Direction</button>'}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="full">Version complète (ordinateur)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
 function mBind(){
@@ -834,7 +835,8 @@ function mBind(){
     if(a==='ref'){ lastSig=''; loadSnaps(); toast('Actualisation…'); return; }
     if(a==='pwd'){ pwdModal(); return; }
     if(a==='drv'||a==='ana'||a==='acc'||a==='dir'){ tab=a; if(a==='dir'){ try{ history.replaceState(null,'','#direction'); }catch(e){} } render(); window.scrollTo(0,0); return; }
-    if(a==='full'){ try{ sessionStorage.setItem('fullView','1'); }catch(e){} render(); return; }
+    if(a==='pilot'){ tab='pilot'; mScr='list'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} render(); window.scrollTo(0,0); return; }
+    if(a==='full'){ try{ sessionStorage.setItem('fullView','1'); }catch(e){} if(tab==='dir'){ tab='pilot'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} } render(); return; }
     if(a==='out'){ sb.auth.signOut(); return; }
     if(a==='glob'||a==='shift'||a==='port'){ if(a==='shift') mShReset(); mScr=a; mVisit=v; try{ history.pushState({m:1},''); }catch(e){} render(); window.scrollTo(0,0); }
   });
@@ -918,49 +920,51 @@ function renderMobile(s){
   mBind();
 }
 
-/* ---------- tableau de bord Direction ---------- */
-let dirTerm=null, dirDay=null;
+/* ---------- tableau de bord Direction (TCE + TC3 fusionnes, meme style que la version telephone) ---------- */
+let dirDay=null;
 function renderDir(){
-  const app=$('#app'); document.body.classList.remove('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
-  const allowed=myTerms();
-  if(!dirTerm){ try{ dirTerm=localStorage.getItem('dirTerm')||''; }catch(e){ dirTerm=''; } }
-  if(!allowed.includes(dirTerm)){ const t=termSel(); dirTerm=allowed.includes(t)?t:(allowed.includes('TC3')?'TC3':allowed[0]); }
-  const ids=TERM[TK[dirTerm]]||[], h=lastHour(), s=lastSnap(), cv=s?craneVessel(s):new Map(), live=liveShift();
+  const app=$('#app'); document.body.classList.add('mobpilot'); document.body.classList.add('dirwide'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
+  const allowed=myTerms(), groups=['TC3','TCE'].filter(t=>allowed.includes(t)).map(t=>({t,ids:TERM[TK[t]]||[]}));
+  const allIds0=groups.flatMap(g=>g.ids), h=lastHour(), s=lastSnap(), cv=s?craneVessel(s):new Map(), live=liveShift();
   const liveDay=live?new Date(live.start).toISOString().slice(0,10):null;
   const days=[...new Set([...snaps.map(dayOf),liveDay].filter(Boolean))].sort();
-  const day=dirDay&&days.includes(dirDay)?dirDay:(liveDay||(s&&dayOf(s))||days[days.length-1]);
+  let today=''; try{ today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Casablanca'}); }catch(e){}
+  const maxDay=[days[days.length-1],today].filter(Boolean).sort().pop()||'';
+  const day=dirDay||liveDay||(s&&dayOf(s))||days[days.length-1]||'';
   const D=day?shiftData(day):{st:{},live:null};
+  const SC=['S1','S2','S3'];
   const shv=(id,c)=>{ const m=D.st&&D.st[c]; if(m){ const e=m.get(id); return {v:e?e.moves||0:0}; } if(D.live&&D.live.code===c) return {v:D.live.map.get(id)||0,live:true}; return null; };
-  const hmv=(x,id)=>{ const c=x.cranes.find(z=>z.id===id); return c?(c.moves||0):null; };
   const H=hours.slice(-12), obj=GT||20;
-  const rows=ids.map(id=>{ const lc=h&&h.cranes.find(z=>z.id===id), lm=lc?lc.moves||0:null, v=cv.get(id);
-    return {id,lc,lm,op:lm!=null&&lm>0,v:v&&(lm>0||v.rem>0)?v:null,sh:['S1','S2','S3'].map(c=>shv(id,c)),hm:H.map(x=>hmv(x,id)),
-      avg:D.live&&D.live.n?(D.live.map.get(id)||0)/D.live.n:null}; });
-  const nOp=rows.filter(r=>r.op).length, sumLast=rows.reduce((a,r)=>a+(r.lm||0),0), sumLive=D.live?rows.reduce((a,r)=>a+(D.live.map.get(r.id)||0),0):null;
-  const tot=c=>{ let a=null; rows.forEach((r,i)=>{ const x=r.sh[['S1','S2','S3'].indexOf(c)]; if(x) a=(a||0)+x.v; }); return a; };
-  const T1=tot('S1'),T2=tot('S2'),T3=tot('S3'), TJ=[T1,T2,T3].some(x=>x!=null)?(T1||0)+(T2||0)+(T3||0):null;
+  const hmv=(x,id)=>{ const c=x.cranes.find(z=>z.id===id); return c?(c.moves||0):null; };
+  const mk=id=>{ const lc=h&&h.cranes.find(z=>z.id===id), lm=lc?lc.moves||0:null, v=cv.get(id);
+    return {id,lc,lm,op:lm!=null&&lm>0,v:v&&(lm>0||v.rem>0)?v:null,sh:SC.map(c=>shv(id,c)),hm:H.map(x=>hmv(x,id))}; };
+  const R=Object.fromEntries(allIds0.map(id=>[id,mk(id)]));
+  groups.forEach(g=>{ g.ids=g.ids.filter(id=>R[id].op); });
+  const allIds=groups.flatMap(g=>g.ids), rows=allIds.map(id=>R[id]);
+  const nOp=rows.length, sumLast=rows.reduce((a,r)=>a+(r.lm||0),0);
+  const tot=(ids,i)=>{ let a=null; ids.forEach(id=>{ const x=R[id].sh[i]; if(x) a=(a||0)+x.v; }); return a; };
+  const T=[0,1,2].map(i=>tot(allIds,i)), TJ=T.some(x=>x!=null)?T.reduce((a,x)=>a+(x||0),0):null;
   const age=h?(Date.now()-h.ts)/60000:null, cls=n=>n==null?'n':n>=obj?'g':n>0?'w':'c';
-  $('#sub').textContent=h?`Rapport horaire de ${h.from}–${h.to}`+(age!=null?` · il y a ${age<90?Math.round(age)+' min':Math.round(age/60)+' h'}`:''):'Aucun rapport horaire reçu';
-  const pill=r=>r.op?'<span class="pill p-good">En opération</span>':r.lc&&/CHECK/i.test(r.lc.status)?'<span class="pill p-warn">À vérifier</span>':r.lm===0?(r.v&&r.v.rem>10?'<span class="pill p-crit">À l\'arrêt</span>':'<span class="pill p-info">Inactif</span>'):'<span class="pill p-info">n/d</span>';
-  const shCell=(x,c,live)=>`<div class="${x&&x.live?'lv':''}"><i>${c}${x&&x.live?' · en cours':''}</i><b>${x?fmt(x.v):'—'}</b></div>`;
-  const seg=allowed.length>1?`<div class="seg" role="group" aria-label="Terminal">${allowed.map(t=>`<button type="button" data-dt="${t}" aria-pressed="${t===dirTerm}">${t}</button>`).join('')}</div>`:'';
-  app.innerHTML=`<div class="dir-bar">${seg}<label class="sub" for="dirDay" style="margin:0 0 0 6px">Journée</label><select id="dirDay">${days.slice().reverse().map(d=>`<option value="${d}" ${d===day?'selected':''}>${dayLab(d)}</option>`).join('')||'<option>—</option>'}</select></div>
-  ${age!=null&&age>100?`<div class="dir-warn">Dernier rapport horaire reçu il y a ${Math.round(age/60)} h (fenêtre ${esc(h.from)}–${esc(h.to)}) : les chiffres « dernière heure » ne sont plus d'actualité.</div>`:''}
-  <div class="strip">
-    <div><div class="k">Portiques en opération</div><div class="v num">${nOp} / ${ids.length}</div></div>
-    <div><div class="k">Mouvements dernière heure</div><div class="v num">${h?fmt(sumLast):'—'}</div></div>
-    <div><div class="k">Rendement moyen / portique</div><div class="v num">${h&&nOp?fmt(sumLast/nOp,1):'—'}</div></div>
-    <div><div class="k">Shift en cours${D.live?' ('+D.live.code+')':''}</div><div class="v num">${sumLive!=null?fmt(sumLive):'—'}</div></div></div>
-  <h2>Portiques ${esc(dirTerm)}</h2>
-  <div class="dir-grid">${rows.map(r=>`<article class="dcard"><div class="dh"><b>${esc(r.id)}</b>${pill(r)}</div>
-    <div class="dv">${r.v?esc(r.v.name):'—'}</div>
-    <div class="dbig ${cls(r.lm)}"><strong>${r.lm==null?'—':fmt(r.lm)}</strong><span>mouvements · dernière heure${h?' ('+esc(h.from)+'–'+esc(h.to)+')':''}${r.avg!=null?' · moy. shift en cours '+fmt(r.avg,1)+' /h':''}</span></div>
-    <div class="dsh">${['S1','S2','S3'].map((c,i)=>shCell(r.sh[i],c)).join('')}</div>
-    <div class="dhrs" aria-label="Mouvements par heure">${r.hm.map((m,i)=>{ const mx=Math.max(obj*1.5,...r.hm.map(z=>z||0)); return `<div class="${cls(m)}"><b>${m==null?'–':m}</b><i style="height:${m?Math.max(4,Math.round(100*m/mx*0.55)):2}px"></i><u>${esc((H[i].to||'').slice(0,2))}h</u></div>`; }).join('')}</div></article>`).join('')||'<div class="empty">Aucun portique.</div>'}</div>
-  <div class="dtot"><h2>Total ${esc(dirTerm)} · ${dayLab(day||'0000-00-00')}</h2><div class="dsh"><div><i>S1 · 07–15</i><b>${T1==null?'—':fmt(T1)}</b></div><div><i>S2 · 15–23</i><b>${T2==null?'—':fmt(T2)}</b></div><div><i>S3 · 23–07</i><b>${T3==null?'—':fmt(T3)}</b></div><div><i>Journée</i><b>${TJ==null?'—':fmt(TJ)}</b></div></div></div>
-  <p class="note">Objectif : ${obj} mouvements par heure et par portique (vert ≥ objectif, orange en dessous, rouge à zéro). Les barres montrent les 12 dernières heures (heure de fin de fenêtre). Les shifts S1 07–15, S2 15–23, S3 23–07 viennent des rapports de fin de shift ; le shift en cours est complété avec les rapports horaires. Mise à jour automatique chaque minute.</p>`;
-  app.querySelectorAll('[data-dt]').forEach(b=>b.onclick=()=>{ dirTerm=b.dataset.dt; try{ localStorage.setItem('dirTerm',dirTerm); }catch(e){} render(); });
-  const ds=$('#dirDay'); if(ds) ds.onchange=e=>{ dirDay=e.target.value; render(); };
+  const status=r=>r.op?['g','En opération']:(r.lc&&/CHECK/i.test(r.lc.status))?['w','À vérifier']:r.lm===0?(r.v&&r.v.rem>10?['c',"À l'arrêt"]:['','Inactif']):['','n/d'];
+  const sub=h?`Rapport horaire de ${esc(h.from)}–${esc(h.to)}`+(age!=null?` · il y a ${age<90?Math.round(age)+' min':Math.round(age/60)+' h'}`:''):'Aucun rapport horaire reçu';
+  const kp=(v,l)=>`<div><b>${v}</b><span>${l}</span></div>`, nv=x=>x==null?'—':fmt(x);
+  const card=r=>{ const [sc,sl]=status(r), mx=Math.max(obj*1.5,...r.hm.map(z=>z||0));
+    return `<article class="d-card"><div class="d-h">${IC.crane}<div class="d-n"><b>${esc(r.id)}<em class="d-st ${sc}">${sl}</em></b><span>${r.v?esc(r.v.name):'—'}</span></div>
+      <div class="d-v ${cls(r.lm)}"><strong>${r.lm==null?'—':fmt(r.lm)}</strong><small>mvts · dernière heure</small></div></div>
+      <div class="d-sh">${SC.map((c,i)=>{ const x=r.sh[i]; return `<div class="${x&&x.live?'lv':''}"><span>${c}${x&&x.live?' · en cours':''}</span><b>${x?fmt(x.v):'—'}</b></div>`; }).join('')}</div>
+      <div class="d-hr" aria-label="Mouvements par heure">${r.hm.map((m,i)=>`<div class="${cls(m)}"><b>${m==null?'–':m}</b><i style="height:${m?Math.max(4,Math.round(100*m/mx*0.4)):2}px"></i><u>${esc((H[i].to||'').slice(0,2))}h</u></div>`).join('')}</div></article>`; };
+  const group=g=>`<h3 class="m-h">${g.t==='TC3'?'TC3 · portiques STS':'TCE · portiques PT'}</h3><div class="d-grid">${g.ids.map(id=>card(R[id])).join('')}</div>
+    <div class="d-tot"><div class="m-two">${SC.map((c,i)=>{ const x=tot(g.ids,i); return `<div><b>${nv(x)}</b><span>Total ${c}</span></div>`; }).join('')}</div></div>`;
+  app.innerHTML=mTop('Direction · '+groups.map(g=>g.t).join(' + '),sub,false,true)+
+   `<div class="m-body">${age!=null&&age>100?`<div class="d-warn">Dernier rapport horaire reçu il y a ${Math.round(age/60)} h : les chiffres « dernière heure » ne sont plus d'actualité.</div>`:''}
+    <div class="m-kpi">${kp(nOp,'portiques en opération')}${kp(h?fmt(sumLast):'—','mvts dernière heure')}${kp(h&&nOp?fmt(sumLast/nOp,1):'—','moy. / portique')}</div>
+    <div class="m-kpi">${SC.map((c,i)=>kp(nv(T[i]),c+(D.live&&D.live.code===c?' · en cours':''))).join('')}</div>
+    <p class="m-note" style="margin:2px 2px 8px">Journée du ${day?dayLab(day):'—'} · ${TJ==null?'—':fmt(TJ)} mouvements (S1 07–15 · S2 15–23 · S3 23–07)</p>
+    <div class="m-date"><input type="date" id="dirDay" value="${day}" max="${maxDay}"></div>
+    ${groups.filter(g=>g.ids.length).map(group).join('')||`<div class="empty"><b>Aucun portique en opération</b>${h?'Aucun mouvement sur le dernier rapport horaire ('+esc(h.from)+'–'+esc(h.to)+').':'Aucun rapport horaire reçu.'}</div>`}
+    <p class="m-note">Seuls les portiques en opération (au moins 1 mouvement sur le dernier rapport horaire) sont affichés. Vert : au moins ${obj} mouvements par heure (objectif) · orange : en dessous. Les barres montrent les 12 dernières heures (heure de fin de fenêtre). Les shifts viennent des rapports de fin de shift ; le shift en cours est complété avec les rapports horaires. Actualisation automatique chaque minute.</p></div>`;
+  mBind();
+  const ds=$('#dirDay'); if(ds) ds.onchange=e=>{ dirDay=e.target.value||null; render(); };
 }
 /* ---------- render ---------- */
 function render(){
@@ -970,7 +974,7 @@ function render(){
   $('#btnImport').hidden=!on||!canImp(); $('#btnPwd').hidden=!on; $('#drop').hidden=!on||!canImp()||(tab!=='ana'&&tab!=='drv');
   if(!on){ showLogin(); return; }
   { const T=[['dir','Direction'],['pilot','Pilotage']]; if(canDrv()) T.push(['drv','Conducteurs']); T.push(['ana','Analyse']); if(isAdmin()) T.push(['acc','Comptes']);
-    if(!T.some(x=>x[0]===tab)) tab='pilot'; document.body.classList.toggle('dirmode',tab==='dir'); $('#tabs').innerHTML=T.map(x=>`<button type="button" data-tab="${x[0]}">${x[1]}</button>`).join(''); }
+    if(!T.some(x=>x[0]===tab)) tab='pilot'; document.body.classList.toggle('dirmode',tab==='dir'); if(tab!=='dir'){ document.body.classList.remove('mobpilot'); document.body.classList.remove('dirwide'); } $('#tabs').innerHTML=T.map(x=>`<button type="button" data-tab="${x[0]}">${x[1]}</button>`).join(''); }
   document.querySelectorAll('#tabs [data-tab]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.tab===tab); b.onclick=()=>{tab=b.dataset.tab;try{ history.replaceState(null,'',tab==='dir'?'#direction':location.pathname+location.search); }catch(e){} render();window.scrollTo(0,0);}; });
   const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
   if(tab!=='acc') accLoaded=false;
