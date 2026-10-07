@@ -150,6 +150,7 @@ body.dirmode #snapSel,body.dirmode label[for=snapSel],body.dirmode #btnImport,bo
 .d-hr i{display:block;width:100%;border-radius:3px 3px 0 0;background:#b9c6d6;min-height:2px}.d-hr .g i{background:#2fa37b}.d-hr .w i{background:#e0a030}.d-hr .c i{background:#e0564c}
 .d-hr b{font-size:9.5px;font-weight:600;line-height:1.2}.d-hr u{text-decoration:none;font-size:8.5px;color:#7a8aa0}
 .d-po{font-style:normal;font-weight:700;font-size:11px;background:#1f3a6e;color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px;vertical-align:1px}
+.d-ed{font-style:normal;font-size:11px;color:#3b82c4;margin-left:6px}.d-h[data-cr]{cursor:pointer}
 .d-tot{background:var(--bg2);border-radius:14px;padding:8px 10px;margin:2px 0 10px}.d-tot .m-two{margin-top:2px}
 .d-warn{background:#fbefd6;color:#a86a00;border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:13.5px}
 @media(min-width:700px){body.mobpilot{background:#dfe7ee}body.mobpilot .wrap{background:#fff;min-height:100vh;box-shadow:0 0 0 1px #cfd9e3,0 8px 30px rgba(31,58,110,.12)}}
@@ -360,9 +361,9 @@ async function loadSnaps(){
   const dr=!canDrv()?{error:1}:await sb.from('driver_shift').select('data').order('ts',{ascending:false}).limit(30);
   const dd=dr.error?[]:dr.data.map(r=>r.data).reverse();
   /* postes a quai saisis par l'utilisateur (table escale_meta ; a defaut, memoire de cet appareil) */
-  const mr=await sb.from('escale_meta').select('visit,poste'); let mt={};
-  if(!mr.error) mr.data.forEach(r=>{ if(r.poste) mt[r.visit]=r.poste; }); else { try{ mt=JSON.parse(localStorage.getItem('postes')||'{}'); }catch(e){} }
-  meta=mt;
+  const mr=await sb.from('escale_meta').select('visit,poste,updated_at'); let mt={}, cm={};
+  if(!mr.error) mr.data.forEach(r=>{ if(!r.poste) return; if(/^CRANE:/.test(r.visit)){ const q=r.poste.split('|'); cm[r.visit.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:Date.parse(r.updated_at)||0}; } else mt[r.visit]=r.poste; }); else { try{ mt=JSON.parse(localStorage.getItem('postes')||'{}'); cm=JSON.parse(localStorage.getItem('cman')||'{}'); }catch(e){} }
+  meta=mt; cman=cm;
   const sig=JSON.stringify(meta)+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
   if(sig===lastSig) return; lastSig=sig;
   hours=hd; rtgs=rd; drivers=dd; if(!drvKey||!dd.some(x=>x.id===drvKey)) drvKey=dd.length?dd[dd.length-1].id:null; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
@@ -544,6 +545,19 @@ const vTerms=(v,s,cv)=>{ const a=asg(v,s,cv), pool=a.length?v.cranes.filter(c=>a
   L.forEach(c=>{ const t=termOf(c.id); if(t==='Autre') return; w[t]=(w[t]||0)+(c.moves||0)+0.001; });
   const k=Object.keys(w).sort((x,y)=>w[y]-w[x]); return [k[0]||'TCE']; };
 const poste=v=>meta[v.visit]||'';
+/* affectation manuelle d'un portique (navire + poste), valable jusqu'au prochain rapport de fin de shift qui fait foi */
+let cman={};
+const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(); if(sn&&m.ts<sn.ts) return null; return m; };
+async function setCrane(id){
+  const m=manFor(id), cur=m?m.vessel:'', v=prompt("Navire actuellement servi par "+id+" (ex. : MIMMI SCHULTE).\nLaisser vide pour revenir à l'information du rapport.",cur);
+  if(v===null) return; const nm=v.trim().toUpperCase(); let po='';
+  if(nm){ const r=prompt("Poste à quai de ce navire (ex. : P83)",m?m.poste:''); if(r===null) return; po=r.trim(); }
+  const key='CRANE:'+id, now=new Date().toISOString();
+  const {error}=await sb.from('escale_meta').upsert({visit:key,poste:nm?nm+'|'+po:null,updated_at:now});
+  if(error){ try{ const c=JSON.parse(localStorage.getItem('cman')||'{}'); if(nm) c[id]={vessel:nm,poste:po,ts:Date.now()}; else delete c[id]; localStorage.setItem('cman',JSON.stringify(c)); }catch(e){} toast('Enregistré sur cet appareil seulement.'); }
+  else toast(nm?'Affectation enregistrée':'Retour au rapport');
+  lastSig=''; loadSnaps();
+}
 async function setPoste(visit){
   const cur0=meta[visit]||'', r=prompt("Poste à quai de l'escale "+visit+" (ex. : Poste 4). Laisser vide pour effacer.",cur0);
   if(r===null) return; const p=r.trim();
@@ -953,8 +967,9 @@ function renderDir(){
   const status=r=>r.op?['g','En opération']:(r.lc&&/CHECK/i.test(r.lc.status))?['w','À vérifier']:r.lm===0?(r.v&&r.v.rem>10?['c',"À l'arrêt"]:['','Inactif']):['','n/d'];
   const sub=h?`Rapport horaire de ${esc(h.from)}–${esc(h.to)}`+(age!=null?` · il y a ${age<90?Math.round(age)+' min':Math.round(age/60)+' h'}`:''):'Aucun rapport horaire reçu';
   const kp=(v,l)=>`<div><b>${v}</b><span>${l}</span></div>`, nv=x=>x==null?'—':fmt(x);
+  const vn=r=>{ const m=manFor(r.id), n=m?m.vessel:(r.v?r.v.name:''), po=m?m.poste:(r.v?poste(r.v):''); return (n?esc(n):'—')+(po?` <em class="d-po">${esc(po)}</em>`:'')+(canImp()?` <i class="d-ed">${m?'✎ manuel':'✎'}</i>`:''); };
   const card=r=>{ const [sc,sl]=status(r), mx=Math.max(obj*1.5,...r.hm.map(z=>z||0));
-    return `<article class="d-card"><div class="d-h">${IC.crane}<div class="d-n"><b>${esc(r.id)}<em class="d-st ${sc}">${sl}</em></b><span>${r.v?esc(r.v.name):'—'}${r.v&&poste(r.v)?` <em class="d-po">${esc(poste(r.v))}</em>`:''}</span></div>
+    return `<article class="d-card"><div class="d-h"${canImp()?` data-cr="${esc(r.id)}"`:''}>${IC.crane}<div class="d-n"><b>${esc(r.id)}<em class="d-st ${sc}">${sl}</em></b><span>${vn(r)}</span></div>
       <div class="d-v ${cls(r.lm)}"><strong>${r.lm==null?'—':fmt(r.lm)}</strong><small>mvts · dernière heure</small></div></div>
       <div class="d-sh">${SC.map((c,i)=>{ const x=r.sh[i]; return `<div class="${x&&x.live?'lv':''}"><span>${c}${x&&x.live?' · en cours':''}</span><b>${x?fmt(x.v):'—'}</b></div>`; }).join('')}</div>
       <div class="d-hr" aria-label="Mouvements par heure">${r.hm.map((m,i)=>`<div class="${cls(m)}"><b>${m==null?'–':m}</b><i style="height:${m?Math.max(4,Math.round(100*m/mx*0.4)):2}px"></i><u>${esc((H[i].to||'').slice(0,2))}h</u></div>`).join('')}</div></article>`; };
@@ -967,8 +982,9 @@ function renderDir(){
     <p class="m-note" style="margin:2px 2px 8px">Journée du ${day?dayLab(day):'—'} · ${TJ==null?'—':fmt(TJ)} mouvements (S1 07–15 · S2 15–23 · S3 23–07)</p>
     <div class="m-date"><input type="date" id="dirDay" value="${day}" max="${maxDay}"></div>
     ${groups.filter(g=>g.ids.length).map(group).join('')||`<div class="empty"><b>Aucun portique en opération</b>${h?'Aucun mouvement sur le dernier rapport horaire ('+esc(h.from)+'–'+esc(h.to)+').':'Aucun rapport horaire reçu.'}</div>`}
-    <p class="m-note">Seuls les portiques en opération (au moins 1 mouvement sur le dernier rapport horaire) sont affichés. Vert : au moins ${obj} mouvements par heure (objectif) · orange : en dessous. Les barres montrent les 12 dernières heures (heure de fin de fenêtre). Les shifts viennent des rapports de fin de shift ; le shift en cours est complété avec les rapports horaires. Actualisation automatique chaque minute.</p></div>`;
+    <p class="m-note">Seuls les portiques en opération (au moins 1 mouvement sur le dernier rapport horaire) sont affichés. Vert : au moins ${obj} mouvements par heure (objectif) · orange : en dessous. Les barres montrent les 12 dernières heures (heure de fin de fenêtre). Les shifts viennent des rapports de fin de shift ; le shift en cours est complété avec les rapports horaires. Actualisation automatique chaque minute.</p>${canImp()?'<p class="m-note">Navire ou poste erroné (portique changé de navire en cours de shift) : touchez la carte du portique pour le corriger. La correction reste valable jusqu\'au prochain rapport de fin de shift.</p>':''}</div>`;
   mBind();
+  app.querySelectorAll('[data-cr]').forEach(e=>e.onclick=()=>setCrane(e.dataset.cr));
   const ds=$('#dirDay'); if(ds) ds.onchange=e=>{ dirDay=e.target.value||null; render(); };
 }
 /* ---------- render ---------- */

@@ -166,3 +166,7 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 
 ## v7.14 — Vue mobile lisible en mode sombre
 - Corrige le texte quasi invisible de la vue mobile / Direction quand le téléphone est en mode sombre : la vue mobile garde maintenant toujours son style clair bleu/blanc.
+
+## v7.15 — Correction manuelle navire/poste d'un portique (écran Direction)
+- Les rapports horaires ne contiennent pas le nom du navire : le navire d'un portique vient du dernier rapport de fin de shift. Si un portique change de navire en cours de shift, toucher sa carte (Direction) permet de saisir le navire et le poste (ex. MIMMI SCHULTE / P83).
+- La correction est enregistrée dans la table escale_meta (clé CRANE:<portique>), visible de tous, et s'efface d'elle-même au prochain rapport de fin de shift. Champ vide = retour à l'information du rapport. Réservé aux Administrateurs et Responsables.
