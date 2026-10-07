@@ -172,6 +172,10 @@ body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 .m-row svg{width:26px;height:26px;stroke:var(--nv);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .m-rl{flex:1;min-width:0}.m-rl b{display:block;font-size:17px}.m-rl span{display:block;font-size:12px;color:#5b6f8f;margin-top:2px}
 .m-rv{font-weight:700;font-size:17px;text-align:right;white-space:nowrap}.m-rv small{font-weight:400;font-size:11px;color:#6b7c93}.m-rv i{font-style:normal;color:#9aa8bb;font-weight:500}
+.m-date input{width:100%;font-size:20px;padding:14px 16px;border:1px solid #c5d2e0;border-radius:16px;color:#1f3a6e;background:#fff;min-height:0}
+.m-shf{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0 8px}
+.m-ck{display:flex;align-items:center;gap:6px;font-size:16px;font-weight:600;color:var(--nv)}.m-ck input{width:24px;height:24px;accent-color:#1f3a6e}
+.m-go{background:var(--bl);color:#fff;border:0;border-radius:14px;font-weight:600;font-size:14px;padding:14px 18px;min-height:0;flex:1;max-width:180px}
 .m-ch2{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.m-ch2 b{font-size:19px}
 .m-st{font-size:12px;border-radius:6px;padding:3px 8px;background:var(--bg2)}.m-st.ok{background:#e0f3ec;color:#12805c}.m-st.low{background:#fbe3e1;color:#b3261e}.m-st.chk{background:#fbefd6;color:#a86a00}
 .m-t3{width:100%;table-layout:fixed;border-collapse:collapse}.m-t3 th{font-size:11px;text-align:center;color:#6b7c93;padding:2px;white-space:normal}.m-t3 td{text-align:center;padding:8px 2px;border-radius:8px}
@@ -495,9 +499,12 @@ function escalesTable(){
 
 /* ---------- v4 : pilotage (vue manager) ---------- */
 const TERM={TCE:['PT05','PT08','PT09','PT10','PT11'],TC3PC:['STS1','STS2','STS3','STS4']};
-const termOf=id=>/^PT/i.test(id)?'TCE':/^STS/i.test(id)?'TC3PC':'Autre';
+const termOf=id=>/^PT/i.test(id)?'TCE':/^STS/i.test(id)?'TC3PC':/^(RORO|DTV)/i.test(id)?'TCE':'Autre';
 const asg=(v,s,cv)=>{ cv=cv||craneVessel(s); return v.cranes.filter(c=>cv.get(c.id)===v).map(c=>c.id); };
-const vTerms=(v,s,cv)=>{ const a=asg(v,s,cv); return [...new Set((a.length?a:v.cranes.map(c=>c.id)).map(termOf))]; };
+/* un navire est opere par un seul terminal : celui de ses portiques ayant le plus travaille ; RORO / DTV et navires sans portique connu = TCE */
+const vTerms=(v,s,cv)=>{ const a=asg(v,s,cv), pool=a.length?v.cranes.filter(c=>a.includes(c.id)):v.cranes.filter(c=>(c.moves||0)>0), L=pool.length?pool:v.cranes, w={};
+  L.forEach(c=>{ const t=termOf(c.id); if(t==='Autre') return; w[t]=(w[t]||0)+(c.moves||0)+0.001; });
+  const k=Object.keys(w).sort((x,y)=>w[y]-w[x]); return [k[0]||'TCE']; };
 const poste=v=>meta[v.visit]||'';
 async function setPoste(visit){
   const cur0=meta[visit]||'', r=prompt("Poste à quai de l'escale "+visit+" (ex. : Poste 4). Laisser vide pour effacer.",cur0);
@@ -760,6 +767,7 @@ const mq=window.matchMedia('(max-width:700px)');
 const fullView=()=>{ try{ return sessionStorage.getItem('fullView')==='1'; }catch(e){ return false; } };
 const isMob=()=>mq.matches&&!fullView();
 (mq.addEventListener?mq.addEventListener.bind(mq,'change'):mq.addListener.bind(mq))(()=>{ if(session) render(); });
+function mShReset(){ mShDate=null; mShCodes=null; }
 window.addEventListener('popstate',()=>{ if(mScr!=='list'){ mScr='list'; mMenu=false; if(session) render(); } });
 const IC={
   globe:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg>',
@@ -785,13 +793,14 @@ function mBind(){
     const a=b.dataset.m, v=b.dataset.v;
     if(a==='menu'){ mMenu=!mMenu; render(); return; }
     mMenu=false;
+    if(a==='shgo'){ const d=$('#mShDate').value; if(d) mShDate=d; mShCodes=[...document.querySelectorAll('.m-shc:checked')].map(x=>x.value); if(!mShCodes.length) mShCodes=['S1']; render(); return; }
     if(a==='term'){ setTerm(termSel()==='TC3'?'TCE':'TC3'); return; }
     if(a==='back'){ if(history.state&&history.state.m) history.back(); else { mScr='list'; render(); } return; }
     if(a==='ref'){ lastSig=''; loadSnaps(); toast('Actualisation…'); return; }
     if(a==='drv'||a==='ana'){ tab=a; render(); window.scrollTo(0,0); return; }
     if(a==='full'){ try{ sessionStorage.setItem('fullView','1'); }catch(e){} render(); return; }
     if(a==='out'){ sb.auth.signOut(); return; }
-    if(a==='glob'||a==='rend'||a==='port'){ mScr=a; mVisit=v; try{ history.pushState({m:1},''); }catch(e){} render(); window.scrollTo(0,0); }
+    if(a==='glob'||a==='shift'||a==='port'){ if(a==='shift') mShReset(); mScr=a; mVisit=v; try{ history.pushState({m:1},''); }catch(e){} render(); window.scrollTo(0,0); }
   });
 }
 const mBar=p=>`<div class="m-bar"><i style="width:${Math.max(0,Math.min(100,p||0))}%"></i></div>`;
@@ -801,7 +810,7 @@ function mList(s){
   const card=v=>{ const p=pct(v), done=rm(v)===0&&v.rem===0, TT=vTerms(v,s,cv).join(' / ');
     return `<article class="m-card"><div class="m-ch">${IC.ship}<div><b>${esc(v.name)}</b><span>${esc(TT)}${poste(v)?' · '+esc(poste(v)):''} · Escale ${esc(v.visit)}</span></div>${done?'<em class="m-pill">À clôturer</em>':`<strong>${p==null?'—':fmt(p,1)+' %'}</strong>`}</div>
       <div class="m-prog">${mBar(done?100:p)}<div><span><b>${fmt(ac(v))}</b> faits</span><span><b>${fmt(rm(v))}</b> restants</span></div></div>
-      <div class="m-btns"><button type="button" data-m="glob" data-v="${esc(v.visit)}">${IC.globe}<span>Vue globale</span></button><button type="button" data-m="rend" data-v="${esc(v.visit)}">${IC.clock}<span>Rendement</span></button><button type="button" data-m="port" data-v="${esc(v.visit)}">${IC.crane}<span>Portiques</span></button></div></article>`; };
+      <div class="m-btns"><button type="button" data-m="glob" data-v="${esc(v.visit)}">${IC.globe}<span>Vue globale</span></button><button type="button" data-m="shift" data-v="${esc(v.visit)}">${IC.clock}<span>Par shift</span></button><button type="button" data-m="port" data-v="${esc(v.visit)}">${IC.crane}<span>Portiques</span></button></div></article>`; };
   const tl=T==='ALL'?Object.keys(TERM):[TK[T]], free=tl.map(t=>{ const f=(TERM[t]||[]).filter(i=>!used.has(i)); return `<div><b>${t==='TC3PC'?'TC3':t}</b> · portiques libres : ${f.length?f.join(', '):'aucun'}</div>`; }).join('');
   const lv=L.some(v=>LV.has(v))&&lh?` · mis à jour avec le rapport horaire de ${hTime(lh)}`:'';
   const tot=L.reduce((a,v)=>a+(rm(v)||0),0);
@@ -827,18 +836,32 @@ function mGlob(s,v){
   ${mRow(IC.warn,'Hors gabarit',n(v.oog),'')}${mRow(IC.sh,'Shifting / restow',n(sh),'')}${mRow(IC.pan,'Panneaux',n(v.hatch),'')}
   <p class="m-note">« n/d » : non fourni par les rapports actuels (demandé à l'IT). Réalisé = shift en cours du rapport.</p></div>`;
 }
-function mRend(s,v){
-  const ids=asg(v,s,craneVessel(s)), day=dayOf(s), live=liveShift();
-  const by={}; snaps.forEach(x=>{ if(dayOf(x)===day){ const c=shiftCode(x); if(!by[c]||x.ts>by[c].ts) by[c]=x; } });
-  const cell=(id,c)=>{ const sn=by[c]; if(sn){ const e=craneStats(sn).get(id); if(!e||!e.moves) return `<td class="m-z">0</td>`; const g=e.hours?e.moves/e.hours:null; return `<td class="${g!=null&&g>=GT?'m-g':'m-o'}"><b>${fmt(e.moves)}</b><small>${g==null?'':fmt(g,1)+'/h'}</small></td>`; }
-    if(live&&live.code===c){ const m=live.map.get(id)||0; return `<td class="m-l"><b>${fmt(m)}</b><small>en cours</small></td>`; } return `<td class="m-z">—</td>`; };
-  const lh=lastHour();
-  return mTop(`Rendement · ${esc(v.name)}`,`Journée du ${day?dayLab(day):'—'} · objectif ${GT} mvts/h`,true)
-   +`<div class="m-body">${ids.length?ids.map(id=>{ const c=lh&&lh.cranes.find(x=>x.id===id);
-     return `<section class="m-box"><div class="m-ch2"><b>${esc(id)}</b>${c?`<span class="m-st ${stCls(c.status)}">${fmt(c.moves)} mvts dernière heure</span>`:''}</div>
-     <table class="m-t3"><thead><tr><th>S1 07–15</th><th>S2 15–23</th><th>S3 23–07</th></tr></thead><tbody><tr>${['S1','S2','S3'].map(k=>cell(id,k)).join('')}</tr></tbody></table></section>`; }).join('')
-     :'<p class="m-note">Aucun portique affecté à ce navire dans le dernier rapport.</p>'}
-   <p class="m-note">Mouvements du shift et mouvements par heure de grue. Vert = objectif atteint, orange = en dessous.</p></div>`;
+let mShDate=null, mShCodes=null;
+function mShift(s,v){
+  const days=[...new Set(snaps.map(dayOf).filter(Boolean))].sort(), lastDay=dayOf(s)||days[days.length-1];
+  if(!mShDate) mShDate=lastDay; if(!mShCodes) mShCodes=[shiftCode(s)].filter(c=>/S[123]/.test(c)); if(!mShCodes.length) mShCodes=['S1'];
+  const ids=asg(v,s,craneVessel(s)), live=liveShift(), liveDay=live?new Date(live.start).toISOString().slice(0,10):null;
+  const by={}; snaps.forEach(x=>{ if(dayOf(x)===mShDate){ const c=shiftCode(x); if(!by[c]||x.ts>by[c].ts) by[c]=x; } });
+  const A={imp:null,expF:null,expE:null,sh:null,land:null,rel:null,oog:null,hatch:null,tot:null}, add=(k,x)=>{ if(x!=null) A[k]=(A[k]||0)+x; }, notes=[];
+  let crane=new Map(); ids.forEach(i=>crane.set(i,{m:0,h:0}));
+  mShCodes.forEach(c=>{ const sn=by[c], sv=sn&&sn.vessels.find(x=>x.visit===v.visit);
+    if(sv){ add('imp',sv.impF!=null||sv.impE!=null?(sv.impF||0)+(sv.impE||0):sv.imp); add('expF',sv.expF); add('expE',sv.expE); add('sh',sv.shifting!=null?sv.shifting:sv.restow); add('land',sv.landed); add('rel',sv.reloaded); add('oog',sv.oog); add('hatch',sv.hatch); add('tot',sv.shiftTotal);
+      ids.forEach(i=>{ const cc=sv.cranes.find(z=>z.id===i); if(cc&&cc.moves){ const e=crane.get(i); e.m+=cc.moves; e.h+=cc.hours||0; } }); }
+    else if(sn) notes.push(`${c} : navire absent du rapport de ce shift.`);
+    else if(live&&live.code===c&&liveDay===mShDate){ const m=ids.reduce((a,i)=>a+(live.map.get(i)||0),0); add('tot',m); ids.forEach(i=>{ crane.get(i).m+=live.map.get(i)||0; }); notes.push(`${c} en cours : ${fmt(m)} mouvement(s) des grues d'après les rapports horaires jusqu'à ${esc(live.upto)} (détail par rubrique à la fin du shift).`); }
+    else notes.push(`${c} : pas de rapport pour ce shift.`); });
+  const n=x=>x==null?'<i>n/d</i>':fmt(x), exp=A.expF==null&&A.expE==null?null:(A.expF||0)+(A.expE||0);
+  const chk=c=>`<label class="m-ck"><input type="checkbox" class="m-shc" value="${c}" ${mShCodes.includes(c)?'checked':''}><span>${c}</span></label>`;
+  return mTop(`${esc(v.name)}`,`Escale ${esc(v.visit)} · VUE PAR SHIFT`,true)
+  +`<div class="m-body"><div class="m-date"><input type="date" id="mShDate" value="${mShDate}" max="${lastDay||''}"></div>
+   <div class="m-shf">${['S1','S2','S3'].map(chk).join('')}<button type="button" class="m-go" data-m="shgo">RECHERCHER</button></div>
+   <p class="m-note" style="margin:0 2px 10px">S1 07–15 · S2 15–23 · S3 23–07 (le S3 démarre la veille au soir)</p>
+   ${mRow(IC.pan,'Total mouvements',n(A.tot),'')}${mRow(IC.imp,'Import',n(A.imp),'')}
+   ${mRow(IC.exp,'Export',n(exp),exp==null?'':`Plein ${n(A.expF)} · Vide ${n(A.expE)}`)}
+   ${mRow(IC.dl,'Débarq / Réembarq',n(A.land)+' / '+n(A.rel),'')}${mRow(IC.warn,'Hors gabarit',n(A.oog),'')}${mRow(IC.sh,'Shifting / restow',n(A.sh),'')}${mRow(IC.pan,'Panneaux',n(A.hatch),'')}
+   ${ids.length?`<h3 class="m-h">Portiques du navire sur la sélection</h3>${ids.map(i=>{ const e=crane.get(i), g=e.h?e.m/e.h:null; return mRow(IC.crane,esc(i),fmt(e.m),g==null?'':fmt(g,1)+' mvts/h'); }).join('')}`:''}
+   ${notes.length?`<p class="m-note m-w">${notes.join('<br>')}</p>`:''}
+   <p class="m-note">Mouvements réalisés pendant les shifts cochés, d'après les rapports de fin de shift. « n/d » : non fourni par les rapports actuels (demandé à l'IT).</p></div>`;
 }
 function mPort(s,v){
   const ids=asg(v,s,craneVessel(s)), H=hours.slice(-8), lh=lastHour();
@@ -852,7 +875,7 @@ function mPort(s,v){
 function renderMobile(s){
   document.body.classList.add('mobpilot');
   const v=mVisit&&s.vessels.find(x=>x.visit===mVisit); if(mScr!=='list'&&!v) mScr='list';
-  $('#app').innerHTML=`<div class="m">${mScr==='glob'?mGlob(s,v):mScr==='rend'?mRend(s,v):mScr==='port'?mPort(s,v):mList(s)}</div>`;
+  $('#app').innerHTML=`<div class="m">${mScr==='glob'?mGlob(s,v):mScr==='shift'?mShift(s,v):mScr==='port'?mPort(s,v):mList(s)}</div>`;
   mBind();
 }
 

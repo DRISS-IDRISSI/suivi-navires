@@ -96,3 +96,8 @@ Le bouton **TC3 ⇄** en haut du téléphone (et le sélecteur TCE / TC3 / Tous 
 - **TCE** : navires travaillant avec PT05, PT08, PT09, PT10, PT11 ; conducteurs CC (cavaliers, feuille « SC » du rapport conducteurs) ; pas de section RTG.
 - **TC3** : navires travaillant avec STS1 à STS4 ; conducteurs RTG ; rapport horaire RTG.
 Les navires sans portique connu (terminés, ex. RORO) apparaissent sous « Non rattachés à un terminal ». Le choix est mémorisé sur l'appareil. L'onglet Analyse reste global.
+
+## v6.2 — vue par shift (téléphone) et rattachement des navires
+
+- Un navire n'appartient plus qu'à **un seul terminal** : celui de ses portiques ayant le plus travaillé. Les navires **RORO / DTV** (et ceux sans portique connu) sont rattachés à **TCE**.
+- Téléphone : le bouton central de chaque escale devient **Par shift** : choix de la date, cases S1 / S2 / S3, bouton Rechercher ; affiche import, export (plein/vide), débarquement/réembarquement, hors gabarit, shifting, panneaux et mouvements par portique pour les shifts cochés. Le shift en cours (sans rapport de fin de shift) est complété avec les rapports horaires.
