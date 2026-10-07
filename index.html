@@ -149,6 +149,7 @@ body.dirmode #snapSel,body.dirmode label[for=snapSel],body.dirmode #btnImport,bo
 .d-hr div{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
 .d-hr i{display:block;width:100%;border-radius:3px 3px 0 0;background:#b9c6d6;min-height:2px}.d-hr .g i{background:#2fa37b}.d-hr .w i{background:#e0a030}.d-hr .c i{background:#e0564c}
 .d-hr b{font-size:9.5px;font-weight:600;line-height:1.2}.d-hr u{text-decoration:none;font-size:8.5px;color:#7a8aa0}
+.d-po{font-style:normal;font-weight:700;font-size:11px;background:#1f3a6e;color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px;vertical-align:1px}
 .d-tot{background:var(--bg2);border-radius:14px;padding:8px 10px;margin:2px 0 10px}.d-tot .m-two{margin-top:2px}
 .d-warn{background:#fbefd6;color:#a86a00;border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:13.5px}
 @media(min-width:700px){body.mobpilot{background:#dfe7ee}body.mobpilot .wrap{background:#fff;min-height:100vh;box-shadow:0 0 0 1px #cfd9e3,0 8px 30px rgba(31,58,110,.12)}}
@@ -949,7 +950,7 @@ function renderDir(){
   const sub=h?`Rapport horaire de ${esc(h.from)}–${esc(h.to)}`+(age!=null?` · il y a ${age<90?Math.round(age)+' min':Math.round(age/60)+' h'}`:''):'Aucun rapport horaire reçu';
   const kp=(v,l)=>`<div><b>${v}</b><span>${l}</span></div>`, nv=x=>x==null?'—':fmt(x);
   const card=r=>{ const [sc,sl]=status(r), mx=Math.max(obj*1.5,...r.hm.map(z=>z||0));
-    return `<article class="d-card"><div class="d-h">${IC.crane}<div class="d-n"><b>${esc(r.id)}<em class="d-st ${sc}">${sl}</em></b><span>${r.v?esc(r.v.name):'—'}</span></div>
+    return `<article class="d-card"><div class="d-h">${IC.crane}<div class="d-n"><b>${esc(r.id)}<em class="d-st ${sc}">${sl}</em></b><span>${r.v?esc(r.v.name):'—'}${r.v&&poste(r.v)?` <em class="d-po">${esc(poste(r.v))}</em>`:''}</span></div>
       <div class="d-v ${cls(r.lm)}"><strong>${r.lm==null?'—':fmt(r.lm)}</strong><small>mvts · dernière heure</small></div></div>
       <div class="d-sh">${SC.map((c,i)=>{ const x=r.sh[i]; return `<div class="${x&&x.live?'lv':''}"><span>${c}${x&&x.live?' · en cours':''}</span><b>${x?fmt(x.v):'—'}</b></div>`; }).join('')}</div>
       <div class="d-hr" aria-label="Mouvements par heure">${r.hm.map((m,i)=>`<div class="${cls(m)}"><b>${m==null?'–':m}</b><i style="height:${m?Math.max(4,Math.round(100*m/mx*0.4)):2}px"></i><u>${esc((H[i].to||'').slice(0,2))}h</u></div>`).join('')}</div></article>`; };

@@ -156,3 +156,6 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.11 — Vue mobile par défaut sur ordinateur
 - L'application s'affiche désormais en **vue mobile** (colonne bleu/blanc centrée) aussi sur PC, pour Pilotage et Direction.
 - Menu ☰ → « Version complète (tableaux détaillés) » pour passer à l'ancienne vue large ; bouton « Vue mobile » pour revenir. Le choix est mémorisé sur l'appareil.
+
+## v7.12 — Poste affiché sur l'écran Direction
+- Chaque portique en opération affiche le poste à quai du navire (ex. P83), tel que saisi dans l'application (clic sur le poste en vue complète sur ordinateur).
