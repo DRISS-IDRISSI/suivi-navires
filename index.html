@@ -1146,10 +1146,15 @@ Driss FELLAH IDRISSI
 Chef de la Division Exploitation – Terminal TC3`;
   return {to:info.mail||'',subject:"Accès à l'application Suivi des escales (TCE / TC3)",body};
 }
-function showPwd(titre,email,pwd,info){
+const APPURL=()=>location.href.split('#')[0].split('?')[0].replace(/index\.html$/,'');
+const mailLab=(m,to)=>m==='envoye'?`<p class="note" style="color:var(--good,#1a7f4b)"><b>✔ Accès envoyé automatiquement à ${esc(to||'')}</b> (identifiant, mot de passe, mode d'emploi, installation, lien du guide).</p>`
+  :m==='pas_adresse'?'<p class="note"><b>Aucune adresse e-mail enregistrée :</b> rien n\'a été envoyé. Utilisez le bouton ci-dessous ou notez le mot de passe.</p>'
+  :m==='non_configure'?'<p class="note">Envoi automatique non configuré (Brevo) : utilisez « Envoyer par e-mail » ci-dessous.</p>'
+  :(m&&m.startsWith('erreur'))?`<p class="note" style="color:var(--bad,#b3261e)"><b>Envoi automatique échoué</b> (${esc(m)}). Utilisez « Envoyer par e-mail » ci-dessous.</p>`:'';
+function showPwd(titre,email,pwd,info,mail){
   const mailInfo=Object.assign({ident:email,pwd},info||{}), msg=accessMail(mailInfo);
-  modal(`<h3>${esc(titre)}</h3><p>Identifiant : <b>${esc(idOf(email))}</b>${msg.to?` · ${esc(msg.to)}`:''}</p><p>Mot de passe provisoire (il devra le changer dès sa première connexion) :</p><div class="pwd num" id="pw">${esc(pwd)}</div>
-    <div class="mdl-b" style="flex-wrap:wrap"><button type="button" id="cp">Copier le mot de passe</button><button type="button" id="cm">Copier le message</button><button type="button" class="primary" id="em2">Envoyer par e-mail</button></div>
+  modal(`<h3>${esc(titre)}</h3><p>Identifiant : <b>${esc(idOf(email))}</b>${msg.to?` · ${esc(msg.to)}`:''}</p><p>Mot de passe provisoire (il devra le changer dès sa première connexion) :</p><div class="pwd num" id="pw">${esc(pwd)}</div>${mailLab(mail,msg.to)}
+    <div class="mdl-b" style="flex-wrap:wrap"><button type="button" id="cp">Copier le mot de passe</button><button type="button" id="cm">Copier le message</button><button type="button" ${mail==='envoye'?'':'class="primary"'} id="em2">${mail==='envoye'?'Renvoyer depuis ma messagerie':'Envoyer par e-mail'}</button></div>
     <div class="mdl-b"><button type="button" data-close>Fermer</button></div>
     <p class="note">Le message contient l'adresse, l'identifiant, le mot de passe, le mode d'emploi (téléphone / ordinateur) et l'installation. ${msg.to?'':'Aucune adresse e-mail enregistrée pour ce compte : indiquez le destinataire dans votre messagerie. '}Le lien du guide PDF est inclus. Ces informations ne seront plus affichées après fermeture.</p>`,
     m=>{ const cp=(t,ok)=>{ try{ navigator.clipboard.writeText(t); toast(ok); }catch(e){ toast('Copie impossible'); } };
@@ -1169,6 +1174,7 @@ function renderAcc(){
   <form class="card acc-f" id="accF" autocomplete="off"><div><label class="sub" for="fE">Identifiant de connexion (ex. FELLAH)</label><input id="fE" type="text" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,29}" title="3 à 30 caractères : lettres, chiffres, point, tiret" autocapitalize="none" spellcheck="false"></div>
     <div><label class="sub" for="fN">Nom affiché</label><input id="fN" type="text" placeholder="ex. Nom Prénom"></div>
     <div><label class="sub" for="fM">Adresse e-mail</label><input id="fM" type="email" placeholder="prenom.nom@marsamaroc.co.ma" autocomplete="off"></div>
+    <div style="align-self:end"><label class="ck"><input type="checkbox" id="fS" checked> Envoyer l'accès par e-mail</label></div>
     <div><label class="sub" for="fR">Rôle</label><select id="fR"><option value="lecture">Lecture</option><option value="responsable">Responsable</option><option value="admin">Administrateur</option></select></div>
     <div><span class="sub">Terminaux</span><div><label class="ck"><input type="checkbox" id="fT1" checked> TCE</label> <label class="ck"><input type="checkbox" id="fT2" checked> TC3</label></div></div>
     <div><label class="sub" for="fP">Mot de passe provisoire</label><div style="display:flex;gap:6px"><input id="fP" type="text" minlength="6" required style="flex:1"><button type="button" id="fG">Générer</button></div></div>
@@ -1178,7 +1184,7 @@ function renderAcc(){
   $('#fG').onclick=()=>{ $('#fP').value=genPwd(); };
   $('#accF').onsubmit=async e=>{ e.preventDefault(); const T=[$('#fT1').checked&&'TCE',$('#fT2').checked&&'TC3'].filter(Boolean); if(!T.length){ toast('Choisir au moins un terminal'); return; }
     const ident=$('#fE').value.trim().toLowerCase(), pwd=$('#fP').value, pb=pwdBad(pwd); if(pb){ toast(pb); return; }
-    try{ await adminCall({action:'create',identifiant:ident,email_contact:$('#fM').value.trim(),nom:$('#fN').value,role:$('#fR').value,terminaux:T,password:pwd}); showPwd('Compte créé',ident,pwd,{nom:$('#fN').value,mail:$('#fM').value.trim(),role:$('#fR').value,terminaux:T}); accLoaded=false; render(); }catch(er){ toast(er.message); } };
+    try{ const r=await adminCall({action:'create',identifiant:ident,email_contact:$('#fM').value.trim(),nom:$('#fN').value,role:$('#fR').value,terminaux:T,password:pwd,envoyer:$('#fS').checked,app_url:APPURL()}); showPwd('Compte créé',ident,pwd,{nom:$('#fN').value,mail:$('#fM').value.trim(),role:$('#fR').value,terminaux:T},r.mail); accLoaded=false; render(); }catch(er){ toast(er.message); } };
   app.querySelectorAll('tr[data-u]').forEach(tr=>{ const id=tr.dataset.u, u=accounts.find(x=>x.user_id===id); if(!u) return;
     const upd=async patch=>{ try{ await adminCall({action:'update',user_id:id,...patch}); toast('Modifié'); accLoaded=false; render(); }catch(er){ toast(er.message); accLoaded=false; render(); } };
     tr.querySelector('.a-role').onchange=e=>upd({role:e.target.value});
@@ -1186,7 +1192,7 @@ function renderAcc(){
     tr.querySelector('[data-a=act]').onclick=()=>{ if(u.actif&&!confirm('Désactiver '+idOf(u.email)+' ? Il ne pourra plus se connecter.')) return; upd({actif:!u.actif}); };
     tr.querySelector('[data-a=mail]').onclick=()=>{ const v=prompt('Adresse e-mail de '+idOf(u.email)+' (laisser vide pour effacer) :',u.email_contact||''); if(v===null) return; upd({email_contact:v.trim()}); };
     tr.querySelector('[data-a=id]').onclick=()=>{ const v=prompt('Nouvel identifiant pour '+idOf(u.email)+' (ex. FELLAH) :',idOf(u.email)); if(!v) return; upd({identifiant:v.trim().toLowerCase()}); };
-    tr.querySelector('[data-a=reset]').onclick=async()=>{ const pw=genPwd(); try{ await adminCall({action:'reset',user_id:id,password:pw}); showPwd('Mot de passe réinitialisé',u.email,pw,{nom:u.nom,mail:u.email_contact,role:u.role,terminaux:u.terminaux}); }catch(er){ toast(er.message); } };
+    tr.querySelector('[data-a=reset]').onclick=async()=>{ const pw=genPwd(); let env=true; if(u.email_contact) env=confirm('Réinitialiser le mot de passe de '+idOf(u.email)+' ? Le nouveau mot de passe sera envoyé à '+u.email_contact+' (si l\'envoi automatique est configuré).'); try{ const r=await adminCall({action:'reset',user_id:id,password:pw,envoyer:env,app_url:APPURL()}); showPwd('Mot de passe réinitialisé',u.email,pw,{nom:u.nom,mail:u.email_contact,role:u.role,terminaux:u.terminaux},r.mail); }catch(er){ toast(er.message); } };
     tr.querySelector('[data-a=del]').onclick=async()=>{ if(!confirm('Supprimer définitivement le compte '+idOf(u.email)+' ? Cette action est irréversible.')) return; try{ await adminCall({action:'delete',user_id:id}); toast('Compte supprimé'); accLoaded=false; render(); }catch(er){ toast(er.message); } };
   });
 }

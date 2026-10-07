@@ -123,3 +123,7 @@ Sécurité : lecture et import sont contrôlés côté base (RLS) ; les données
 ## v7.3 — message d'accès aux utilisateurs
 
 Après la création d'un compte ou la réinitialisation d'un mot de passe, la fenêtre propose **Envoyer par e-mail** (ouvre la messagerie avec le message prêt, destinataire = adresse du compte) et **Copier le message**. Le message donne l'adresse, l'identifiant, le mot de passe provisoire, le mode d'emploi des versions téléphone / ordinateur, l'installation et le lien vers `guide-utilisateur.pdf` (guide de 2 pages hébergé avec l'application). L'application n'envoie pas elle-même d'e-mail : le message part de la messagerie de l'administrateur.
+
+## v7.4 — envoi automatique des accès par e-mail (Brevo)
+
+La fonction `admin-users` envoie, à la création d'un compte ou à la réinitialisation d'un mot de passe, le message d'accès (identifiant, mot de passe provisoire, mode d'emploi téléphone / ordinateur, installation, lien du guide) à l'adresse e-mail du compte, via l'API Brevo. Secrets à créer dans Supabase (Edge Functions > Secrets) : `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` (expéditeur validé dans Brevo), éventuellement `BREVO_SENDER_NAME` et `APP_URL`. Sans ces secrets, tout fonctionne comme avant (envoi manuel). Case « Envoyer l'accès par e-mail » dans le formulaire de création.
