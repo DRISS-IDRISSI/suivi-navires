@@ -101,3 +101,16 @@ Les navires sans portique connu (terminés, ex. RORO) apparaissent sous « Non r
 
 - Un navire n'appartient plus qu'à **un seul terminal** : celui de ses portiques ayant le plus travaillé. Les navires **RORO / DTV** (et ceux sans portique connu) sont rattachés à **TCE**.
 - Téléphone : le bouton central de chaque escale devient **Par shift** : choix de la date, cases S1 / S2 / S3, bouton Rechercher ; affiche import, export (plein/vide), débarquement/réembarquement, hors gabarit, shifting, panneaux et mouvements par portique pour les shifts cochés. Le shift en cours (sans rapport de fin de shift) est complété avec les rapports horaires.
+
+## v7 — comptes utilisateurs
+
+Rôles : **Administrateur** (gère les comptes), **Responsable** (voit tout, y compris les conducteurs, et importe), **Lecture** (consulte ; pas d'onglet Conducteurs, pas d'import). Chaque compte est rattaché à **TCE**, **TC3** ou aux deux.
+Mise en service : exécuter `supabase/comptes_utilisateurs.sql` (après avoir remplacé l'e-mail administrateur), déployer la fonction `supabase/functions/admin-users`, désactiver l'inscription publique (Authentication > Sign In / Providers > « Allow new users to sign up » désactivé), puis publier l'application. Onglet **Comptes** (administrateur) : créer un compte avec mot de passe provisoire, changer rôle / terminaux, désactiver, réinitialiser le mot de passe, supprimer. Chaque utilisateur change son mot de passe via **Mon compte**.
+Sécurité : lecture et import sont contrôlés côté base (RLS) ; les données conducteurs ne sont lisibles que par administrateurs et responsables. La restriction de terminal est une restriction d'affichage (les rapports des deux terminaux restent lisibles par tout compte actif).
+
+## v7.1 — connexion par identifiant et mot de passe à changer à la première connexion
+
+- Chaque utilisateur se connecte avec un **identifiant** (ex. `FELLAH`) et son mot de passe, plus avec une adresse e-mail. En interne, le compte Supabase est `identifiant@suivi-tc3.invalid` (adresse fictive : aucun e-mail n'est envoyé). Si Supabase refusait ce domaine, changer la constante `DOMAINE` dans la fonction `admin-users` et `IDOM` dans `index.html`.
+- À la **première connexion** (et après chaque réinitialisation par l'administrateur), une fenêtre non fermable impose de choisir un mot de passe personnel (10 caractères minimum, lettres et chiffres). Le contrôle est fait par l'application (indicateur `doit_changer_mdp` dans `profiles`).
+- L'administrateur initial est `d_fellahidrissi@marsamaroc.co.ma` (script SQL). Après sa première connexion avec cet e-mail : onglet **Comptes** > bouton **Identifiant** > `fellah`, puis se reconnecter avec FELLAH.
+- Onglet Comptes : création par identifiant, bouton « Identifiant » pour renommer, mention « doit changer son mot de passe ».

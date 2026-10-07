@@ -1,7 +1,8 @@
-// Edge Function "ingest-report" (v3) : reçoit un rapport Excel (base64) et l'enregistre.
+// Edge Function "ingest-report" (v4) : reçoit un rapport Excel (base64) et l'enregistre.
 //  - REP_MM_END_SHIFT (fin de shift, .xlsx)      -> table "snapshots"
 //  - REP_QUAY_CRANE_DELAYS (horaire, .xls/.xlsx) -> table "hourly"
 //  - REP_RTG_MOVES_HOURLY (horaire RTG, .xls)    -> table "rtg_hourly"
+//  - REP_LATESTSHIFTRTGSCECDRIVERMOVES (conducteurs RTG et SC du dernier shift, .xls, 2 feuilles) -> table "driver_shift"
 // Le type est reconnu d'après le CONTENU du fichier (pas le nom).
 // Corps : { "contentBase64": "..." } ; en-tête obligatoire : x-api-key = secret INGEST_KEY
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -150,14 +151,53 @@ export function parseRtg(R: any[][]) {
   return { id, ts, from: hhmm(a), to: hhmm(b), min, total, vessel, yard, gate, generated: gen.replace(/^Generated\s*/i, ""), rtgs };
 }
 
+// ---------- Mouvements par conducteur du dernier shift (feuilles RTG et SC) ----------
+export function parseDrivers(wb: any) {
+  const sheet = (name: string): any[][] =>
+    wb.Sheets[name] ? XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" }) : [];
+  const rows = (name: string) => {
+    const R = sheet(name);
+    const h = R.findIndex((r) => String(r[0]).trim() === "TYPE_ENGIN");
+    if (h < 0) return { R, out: [] as any[] };
+    const H = R[h].map((x: any) => String(x).trim()), col = (n: string) => H.indexOf(n);
+    const g = (r: any[], n: string) => { const v = r[col(n)]; return v === "" || v == null ? null : v; };
+    const out: any[] = [];
+    for (let k = h + 1; k < R.length; k++) {
+      const r = R[k]; if (!String(r[0]).trim()) continue;
+      out.push({
+        m: g(r, "MATRICULE"), n: g(r, "NOM"), p: g(r, "PRENOM"), l: g(r, "LOGIN"), e: g(r, "ENGIN"),
+        li: g(r, "HEURE_LOGIN"), lo: g(r, "HEURE_LOGOUT"), dur: num(g(r, "DUREE_MIN")), st: g(r, "STATUT_SESSION"), ns: num(g(r, "NB_SESSIONS")),
+        in: num(g(r, "NOMBRE_IN")) ?? 0, out: num(g(r, "NOMBRE_OUT")) ?? 0, move: num(g(r, "NOMBRE_MOVE")) ?? 0, shifting: num(g(r, "NOMBRE_SHIFTING")) ?? 0,
+        disch: num(g(r, "NOMBRE_DISCH")) ?? 0, load: num(g(r, "NOMBRE_LOAD")) ?? 0, other: num(g(r, "NOMBRE_AUTRE")) ?? 0, total: num(g(r, "TOTAL_MVMT")) ?? 0,
+        fm: g(r, "PREMIER_MVMT"), lm: g(r, "DERNIER_MVMT"),
+      });
+    }
+    return { R, out };
+  };
+  const a = rows("RTG"), b = rows("SC");
+  const head = String((a.R[1] || [])[0] ?? (b.R[1] || [])[0] ?? "");
+  const m = head.match(/SHIFT\s+(S\d)\s*>=\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}).*?<\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+  if (!m) throw new Error("En-tête du shift introuvable dans le rapport conducteurs.");
+  const id = `${m[4]}${m[3]}${m[2]}${m[1]}`;                 // ex. 20261005S3 (date de début + code du shift)
+  const ts = casaToUtc(+m[9], +m[8] - 1, +m[7], +m[10], +m[11]); // fin du shift
+  return { id, ts, shift: m[1], start: `${m[4]}-${m[3]}-${m[2]} ${m[5]}:${m[6]}`, end: `${m[9]}-${m[8]}-${m[7]} ${m[10]}:${m[11]}`, rtg: a.out, sc: b.out };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("POST uniquement", { status: 405 });
   if (req.headers.get("x-api-key") !== Deno.env.get("INGEST_KEY")) return new Response("Non autorisé", { status: 401 });
   try {
     const { contentBase64 } = await req.json();
     const bytes = Uint8Array.from(atob(String(contentBase64).replace(/\s/g, "")), (c) => c.charCodeAt(0));
-    const R = rowsOf(XLSX.read(bytes, { type: "array" }));
+    const wbk = XLSX.read(bytes, { type: "array" });
+    const R = rowsOf(wbk);
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    if (R.some((l) => l.some((x: any) => /MOUVEMENTS EC EVENT PAR CONDUCTEUR/i.test(String(x))))) {
+      const d = parseDrivers(wbk);
+      const { error } = await sb.from("driver_shift").upsert({ id: d.id, ts: new Date(d.ts).toISOString(), data: d });
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, type: "conducteurs", id: d.id, rtg: d.rtg.length, sc: d.sc.length }), { headers: { "content-type": "application/json" } });
+    }
     if (R.some((l) => l.some((x: any) => /Hourly RTG Moves/i.test(String(x))))) {
       const g = parseRtg(R);
       const { error } = await sb.from("rtg_hourly").upsert({ id: g.id, ts: new Date(g.ts).toISOString(), data: g });
