@@ -114,3 +114,12 @@ Sécurité : lecture et import sont contrôlés côté base (RLS) ; les données
 - À la **première connexion** (et après chaque réinitialisation par l'administrateur), une fenêtre non fermable impose de choisir un mot de passe personnel (10 caractères minimum, lettres et chiffres). Le contrôle est fait par l'application (indicateur `doit_changer_mdp` dans `profiles`).
 - L'administrateur initial est `d_fellahidrissi@marsamaroc.co.ma` (script SQL). Après sa première connexion avec cet e-mail : onglet **Comptes** > bouton **Identifiant** > `fellah`, puis se reconnecter avec FELLAH.
 - Onglet Comptes : création par identifiant, bouton « Identifiant » pour renommer, mention « doit changer son mot de passe ».
+
+## v7.2 — e-mail de contact et mots de passe simples
+
+- Nouveau champ **Adresse e-mail** (facultatif, information seulement) à la création d'un compte, bouton « E-mail » pour la modifier ; script `supabase/ajout_email_contact.sql`.
+- Mot de passe : **6 caractères minimum** (ex. `nabil123`), sans autre contrainte. Le changement à la première connexion reste obligatoire. Vérifier dans Supabase (Authentication > Sign In / Providers > Email) que « Minimum password length » est ≤ 6.
+
+## v7.3 — message d'accès aux utilisateurs
+
+Après la création d'un compte ou la réinitialisation d'un mot de passe, la fenêtre propose **Envoyer par e-mail** (ouvre la messagerie avec le message prêt, destinataire = adresse du compte) et **Copier le message**. Le message donne l'adresse, l'identifiant, le mot de passe provisoire, le mode d'emploi des versions téléphone / ordinateur, l'installation et le lien vers `guide-utilisateur.pdf` (guide de 2 pages hébergé avec l'application). L'application n'envoie pas elle-même d'e-mail : le message part de la messagerie de l'administrateur.

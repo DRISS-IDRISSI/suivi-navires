@@ -20,6 +20,7 @@ create table if not exists public.profiles (
 );
 alter table public.profiles add column if not exists identifiant text unique;
 alter table public.profiles add column if not exists doit_changer_mdp boolean not null default true;
+alter table public.profiles add column if not exists email_contact text;
 alter table public.profiles enable row level security;
 
 -- l'utilisateur marque lui-même son changement de mot de passe comme fait (seule écriture autorisée sur son profil)

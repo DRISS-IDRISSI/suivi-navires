@@ -15,7 +15,9 @@ const okTerms = (t: unknown) => Array.isArray(t) && t.length > 0 && t.every((x) 
 const DOMAINE = "suivi-tc3.invalid";                       // e-mail technique : identifiant@suivi-tc3.invalid (aucun e-mail n'est jamais envoyé)
 const normId = (x: unknown) => String(x ?? "").trim().toLowerCase();
 const okId = (x: string) => /^[a-z0-9][a-z0-9._-]{2,29}$/.test(x);
-const okPwd = (p: unknown) => typeof p === "string" && p.length >= 10 && p.length <= 72;
+const okPwd = (p: unknown) => typeof p === "string" && p.length >= 6 && p.length <= 72;   // mot de passe simple autorisé (min. 6 = minimum Supabase par défaut)
+const normMail = (x: unknown) => String(x ?? "").trim().toLowerCase();
+const okMail = (x: string) => x === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -41,14 +43,16 @@ Deno.serve(async (req) => {
       const ident = normId(b.identifiant);
       if (!okId(ident)) return json({ error: "Identifiant invalide : 3 à 30 caractères (lettres, chiffres, point, tiret), ex. fellah" }, 400);
       const email = `${ident}@${DOMAINE}`;
+      const mail = normMail(b.email_contact);
+      if (!okMail(mail)) return json({ error: "Adresse e-mail invalide" }, 400);
       const { data: ex } = await sb.from("profiles").select("user_id").eq("identifiant", ident).maybeSingle();
       if (ex) return json({ error: "Cet identifiant existe déjà" }, 400);
       if (!ROLES.includes(b.role)) return json({ error: "Rôle invalide" }, 400);
       if (!okTerms(b.terminaux)) return json({ error: "Choisir au moins un terminal (TCE, TC3)" }, 400);
-      if (!okPwd(b.password)) return json({ error: "Mot de passe provisoire : 10 caractères minimum" }, 400);
+      if (!okPwd(b.password)) return json({ error: "Mot de passe provisoire : 6 caractères minimum" }, 400);
       const { data: c, error } = await sb.auth.admin.createUser({ email, password: b.password, email_confirm: true });
       if (error || !c?.user) return json({ error: error?.message ?? "Création impossible" }, 400);
-      const { error: e2 } = await sb.from("profiles").insert({ user_id: c.user.id, email, identifiant: ident, nom: String(b.nom || "").trim() || null, role: b.role, terminaux: b.terminaux, doit_changer_mdp: true });
+      const { error: e2 } = await sb.from("profiles").insert({ user_id: c.user.id, email, identifiant: ident, nom: String(b.nom || "").trim() || null, email_contact: mail || null, role: b.role, terminaux: b.terminaux, doit_changer_mdp: true });
       if (e2) { await sb.auth.admin.deleteUser(c.user.id); return json({ error: e2.message }, 400); }
       return json({ ok: true, user_id: c.user.id });
     }
@@ -62,6 +66,7 @@ Deno.serve(async (req) => {
       if (b.role !== undefined) { if (!ROLES.includes(b.role)) return json({ error: "Rôle invalide" }, 400); patch.role = b.role; }
       if (b.terminaux !== undefined) { if (!okTerms(b.terminaux)) return json({ error: "Au moins un terminal" }, 400); patch.terminaux = b.terminaux; }
       if (b.actif !== undefined) patch.actif = !!b.actif;
+      if (b.email_contact !== undefined) { const m = normMail(b.email_contact); if (!okMail(m)) return json({ error: "Adresse e-mail invalide" }, 400); patch.email_contact = m || null; }
       if (b.identifiant !== undefined) {
         const ident = normId(b.identifiant);
         if (!okId(ident)) return json({ error: "Identifiant invalide : 3 à 30 caractères (lettres, chiffres, point, tiret)" }, 400);
@@ -80,7 +85,7 @@ Deno.serve(async (req) => {
     }
 
     if (b.action === "reset") {
-      if (!okPwd(b.password)) return json({ error: "Mot de passe provisoire : 10 caractères minimum" }, 400);
+      if (!okPwd(b.password)) return json({ error: "Mot de passe provisoire : 6 caractères minimum" }, 400);
       const { error } = await sb.auth.admin.updateUserById(id, { password: b.password });
       if (error) return json({ error: error.message }, 400);
       await sb.from("profiles").update({ doit_changer_mdp: true }).eq("user_id", id);

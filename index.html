@@ -1086,12 +1086,12 @@ function modal(html,onMount,lock){
 }
 const closeModal=()=>{ const m=$('#modal'); if(m){ m.hidden=true; m.innerHTML=''; } };
 function genPwd(){ const A='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; for(;;){ const r=new Uint32Array(14); crypto.getRandomValues(r); const p=[...r].map(x=>A[x%A.length]).join(''); if(/[A-Za-z]/.test(p)&&/[0-9]/.test(p)) return p; } }
-const pwdBad=a=>a.length<10?'10 caractères minimum.':(!/[A-Za-z]/.test(a)||!/[0-9]/.test(a))?'Le mot de passe doit contenir des lettres et des chiffres.':'';
+const pwdBad=a=>a.length<6?'6 caractères minimum.':'';
 async function setPwd(a){ const {error}=await sb.auth.updateUser({password:a}); if(error) return error.message; await sb.rpc('mdp_change'); if(me) me.doit_changer_mdp=false; return ''; }
 function forcePwd(){
   if($('#npForce')) return;
   modal(`<h3 id="npForce">Changer votre mot de passe</h3><p>Pour votre sécurité, choisissez un mot de passe personnel avant de continuer.</p>
-    <label class="sub" for="np1">Nouveau mot de passe (10 caractères minimum, lettres et chiffres)</label><input id="np1" type="password" autocomplete="new-password">
+    <label class="sub" for="np1">Nouveau mot de passe (6 caractères minimum)</label><input id="np1" type="password" autocomplete="new-password">
     <label class="sub" for="np2">Confirmer</label><input id="np2" type="password" autocomplete="new-password">
     <div class="mdl-b"><button type="button" id="npOut">Se déconnecter</button><button type="button" class="primary" id="npOk">Valider</button></div><div class="note" id="npErr"></div>`,
     m=>{ m.querySelector('#npOut').onclick=()=>sb.auth.signOut();
@@ -1101,7 +1101,7 @@ function forcePwd(){
 }
 function pwdModal(){
   modal(`<h3>Mon compte</h3><p class="vv">${esc(idOf(session.user.email))} · ${esc(ROLE_LAB[me.role]||me.role)} · ${myTerms().join(' + ')}</p>
-    <label class="sub" for="np1">Nouveau mot de passe (10 caractères minimum)</label><input id="np1" type="password" autocomplete="new-password">
+    <label class="sub" for="np1">Nouveau mot de passe (6 caractères minimum)</label><input id="np1" type="password" autocomplete="new-password">
     <label class="sub" for="np2">Confirmer</label><input id="np2" type="password" autocomplete="new-password">
     <div class="mdl-b"><button type="button" data-close>Annuler</button><button type="button" class="primary" id="npOk">Changer</button></div><div class="note" id="npErr"></div>`,
     m=>{ m.querySelector('#npOk').onclick=async()=>{ const a=m.querySelector('#np1').value, b=m.querySelector('#np2').value, er=m.querySelector('#npErr');
@@ -1115,39 +1115,78 @@ async function adminCall(body){
 }
 async function accFetch(){ try{ const r=await adminCall({action:'list'}); accounts=r.users||[]; }catch(e){ toast('Comptes : '+e.message+' (fonction admin-users déployée ?)'); accounts=[]; } render(); }
 const when2=t=>t?new Date(t).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'jamais';
-function showPwd(titre,email,pwd){
-  modal(`<h3>${esc(titre)}</h3><p>Identifiant : <b>${esc(idOf(email))}</b></p><p>Mot de passe provisoire (à communiquer à l'utilisateur ; il devra le changer dès sa première connexion) :</p><div class="pwd num" id="pw">${esc(pwd)}</div>
-    <div class="mdl-b"><button type="button" id="cp">Copier</button><button type="button" class="primary" data-close>Fermer</button></div><p class="note">Ce mot de passe ne sera plus affiché après fermeture.</p>`,
-    m=>{ m.querySelector('#cp').onclick=()=>{ try{ navigator.clipboard.writeText(pwd); toast('Copié'); }catch(e){ toast('Copie impossible : notez-le'); } }; });
+function accessMail(info){
+  const url=location.href.split('#')[0].split('?')[0].replace(/index\.html$/,''), nom=(info.nom||'').trim(), T=(info.terminaux||[]).join(' + ')||'TCE + TC3';
+  const drv=info.role==='admin'||info.role==='responsable';
+  const body=`Bonjour${nom?' '+nom:''},
+
+Votre accès à l'application « Suivi des escales » (suivi de l'avancement des navires, rendement des grues${drv?' et des conducteurs':''}) est créé.
+
+Adresse : ${url}
+Guide d'utilisation (PDF) : ${url}guide-utilisateur.pdf
+Identifiant : ${idOf(info.ident)}
+Mot de passe provisoire : ${info.pwd}
+Profil : ${ROLE_LAB[info.role]||info.role} · Terminaux : ${T}
+
+À la première connexion, l'application vous demande de choisir votre propre mot de passe (6 caractères minimum). Merci de ne pas le partager.
+
+DEUX VERSIONS, MÊME ADRESSE
+- Téléphone : version simplifiée, affichée automatiquement. Liste des escales, avancement, vue « Par shift » (date + S1 / S2 / S3), rendement et mouvements par portique. Le bouton en haut (TCE / TC3) change de terminal.
+- Ordinateur : version complète avec tableaux détaillés, analyse${drv?', conducteurs':''} et exports Excel / PDF. Depuis le téléphone, menu ☰ > « Version complète » ; « Vue mobile » pour revenir.
+
+INSTALLATION (facultative, comme une application)
+- Android (Chrome) : menu ⋮ > « Installer l'application » ou « Ajouter à l'écran d'accueil ».
+- iPhone (Safari) : bouton Partager > « Sur l'écran d'accueil ».
+- Ordinateur (Chrome / Edge) : icône « Installer » à droite de la barre d'adresse.
+
+Les données se mettent à jour automatiquement à chaque rapport horaire et de fin de shift. En cas de difficulté de connexion, contactez-moi.
+
+Cordialement,
+Driss FELLAH IDRISSI
+Chef de la Division Exploitation – Terminal TC3`;
+  return {to:info.mail||'',subject:"Accès à l'application Suivi des escales (TCE / TC3)",body};
+}
+function showPwd(titre,email,pwd,info){
+  const mailInfo=Object.assign({ident:email,pwd},info||{}), msg=accessMail(mailInfo);
+  modal(`<h3>${esc(titre)}</h3><p>Identifiant : <b>${esc(idOf(email))}</b>${msg.to?` · ${esc(msg.to)}`:''}</p><p>Mot de passe provisoire (il devra le changer dès sa première connexion) :</p><div class="pwd num" id="pw">${esc(pwd)}</div>
+    <div class="mdl-b" style="flex-wrap:wrap"><button type="button" id="cp">Copier le mot de passe</button><button type="button" id="cm">Copier le message</button><button type="button" class="primary" id="em2">Envoyer par e-mail</button></div>
+    <div class="mdl-b"><button type="button" data-close>Fermer</button></div>
+    <p class="note">Le message contient l'adresse, l'identifiant, le mot de passe, le mode d'emploi (téléphone / ordinateur) et l'installation. ${msg.to?'':'Aucune adresse e-mail enregistrée pour ce compte : indiquez le destinataire dans votre messagerie. '}Le lien du guide PDF est inclus. Ces informations ne seront plus affichées après fermeture.</p>`,
+    m=>{ const cp=(t,ok)=>{ try{ navigator.clipboard.writeText(t); toast(ok); }catch(e){ toast('Copie impossible'); } };
+      m.querySelector('#cp').onclick=()=>cp(pwd,'Copié');
+      m.querySelector('#cm').onclick=()=>cp(msg.body,'Message copié');
+      m.querySelector('#em2').onclick=()=>{ location.href='mailto:'+encodeURIComponent(msg.to).replace('%40','@')+'?subject='+encodeURIComponent(msg.subject)+'&body='+encodeURIComponent(msg.body).replace(/%0A/g,'%0D%0A'); }; });
 }
 function renderAcc(){
   const app=$('#app'); $('#sub').textContent='Gestion des comptes · administrateur';
   if(!accLoaded){ accLoaded=true; accFetch(); }
-  const rows=accounts.map(u=>`<tr data-u="${esc(u.user_id)}"><td><b>${esc(u.nom||'—')}</b><div class="vv"><b>${esc(String(u.identifiant||idOf(u.email)).toUpperCase())}</b>${u.moi?' · vous':''}${u.doit_changer_mdp?' · doit changer son mot de passe':''}</div></td>
+  const rows=accounts.map(u=>`<tr data-u="${esc(u.user_id)}"><td><b>${esc(u.nom||'—')}</b><div class="vv"><b>${esc(String(u.identifiant||idOf(u.email)).toUpperCase())}</b>${u.moi?' · vous':''}${u.email_contact?' · '+esc(u.email_contact):''}${u.doit_changer_mdp?' · doit changer son mot de passe':''}</div></td>
     <td><select class="a-role" ${u.moi?'disabled':''}>${Object.keys(ROLE_LAB).map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${ROLE_LAB[r]}</option>`).join('')}</select></td>
     <td>${['TCE','TC3'].map(t=>`<label class="ck"><input type="checkbox" class="a-term" value="${t}" ${(u.terminaux||[]).includes(t)?'checked':''}> ${t}</label>`).join(' ')}</td>
     <td><span class="pill ${u.actif?'p-good':'p-crit'}">${u.actif?'Actif':'Désactivé'}</span></td><td class="vv">${when2(u.derniere_connexion)}</td>
-    <td class="acts"><button type="button" data-a="id">Identifiant</button> <button type="button" data-a="reset">Mot de passe</button> <button type="button" data-a="act" ${u.moi?'disabled':''}>${u.actif?'Désactiver':'Réactiver'}</button> <button type="button" data-a="del" ${u.moi?'disabled':''}>Supprimer</button></td></tr>`).join('');
+    <td class="acts"><button type="button" data-a="mail">E-mail</button> <button type="button" data-a="id">Identifiant</button> <button type="button" data-a="reset">Mot de passe</button> <button type="button" data-a="act" ${u.moi?'disabled':''}>${u.actif?'Désactiver':'Réactiver'}</button> <button type="button" data-a="del" ${u.moi?'disabled':''}>Supprimer</button></td></tr>`).join('');
   app.innerHTML=`<h2 style="margin-top:0">Nouveau compte</h2>
   <form class="card acc-f" id="accF" autocomplete="off"><div><label class="sub" for="fE">Identifiant de connexion (ex. FELLAH)</label><input id="fE" type="text" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,29}" title="3 à 30 caractères : lettres, chiffres, point, tiret" autocapitalize="none" spellcheck="false"></div>
     <div><label class="sub" for="fN">Nom affiché</label><input id="fN" type="text" placeholder="ex. Nom Prénom"></div>
+    <div><label class="sub" for="fM">Adresse e-mail</label><input id="fM" type="email" placeholder="prenom.nom@marsamaroc.co.ma" autocomplete="off"></div>
     <div><label class="sub" for="fR">Rôle</label><select id="fR"><option value="lecture">Lecture</option><option value="responsable">Responsable</option><option value="admin">Administrateur</option></select></div>
     <div><span class="sub">Terminaux</span><div><label class="ck"><input type="checkbox" id="fT1" checked> TCE</label> <label class="ck"><input type="checkbox" id="fT2" checked> TC3</label></div></div>
-    <div><label class="sub" for="fP">Mot de passe provisoire</label><div style="display:flex;gap:6px"><input id="fP" type="text" minlength="10" required style="flex:1"><button type="button" id="fG">Générer</button></div></div>
+    <div><label class="sub" for="fP">Mot de passe provisoire</label><div style="display:flex;gap:6px"><input id="fP" type="text" minlength="6" required style="flex:1"><button type="button" id="fG">Générer</button></div></div>
     <div style="align-self:end"><button class="primary" type="submit">Créer le compte</button></div></form>
   <p class="note">Rôles : <b>Administrateur</b> gère les comptes ; <b>Responsable</b> voit tout (dont les conducteurs) et importe des rapports ; <b>Lecture</b> consulte sans l'onglet Conducteurs ni import. Un compte limité à un terminal ne voit que ce terminal dans l'interface. Chaque utilisateur se connecte avec son <b>identifiant</b> et doit choisir son propre mot de passe à la première connexion.</p>
   <h2>Comptes (${accounts.length})</h2><div class="tw card" style="padding:6px 12px;margin-top:0"><table><thead><tr><th>Utilisateur</th><th>Rôle</th><th>Terminaux</th><th>État</th><th>Dernière connexion</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="vv">Chargement…</td></tr>'}</tbody></table></div>`;
   $('#fG').onclick=()=>{ $('#fP').value=genPwd(); };
   $('#accF').onsubmit=async e=>{ e.preventDefault(); const T=[$('#fT1').checked&&'TCE',$('#fT2').checked&&'TC3'].filter(Boolean); if(!T.length){ toast('Choisir au moins un terminal'); return; }
     const ident=$('#fE').value.trim().toLowerCase(), pwd=$('#fP').value, pb=pwdBad(pwd); if(pb){ toast(pb); return; }
-    try{ await adminCall({action:'create',identifiant:ident,nom:$('#fN').value,role:$('#fR').value,terminaux:T,password:pwd}); showPwd('Compte créé',ident,pwd); accLoaded=false; render(); }catch(er){ toast(er.message); } };
+    try{ await adminCall({action:'create',identifiant:ident,email_contact:$('#fM').value.trim(),nom:$('#fN').value,role:$('#fR').value,terminaux:T,password:pwd}); showPwd('Compte créé',ident,pwd,{nom:$('#fN').value,mail:$('#fM').value.trim(),role:$('#fR').value,terminaux:T}); accLoaded=false; render(); }catch(er){ toast(er.message); } };
   app.querySelectorAll('tr[data-u]').forEach(tr=>{ const id=tr.dataset.u, u=accounts.find(x=>x.user_id===id); if(!u) return;
     const upd=async patch=>{ try{ await adminCall({action:'update',user_id:id,...patch}); toast('Modifié'); accLoaded=false; render(); }catch(er){ toast(er.message); accLoaded=false; render(); } };
     tr.querySelector('.a-role').onchange=e=>upd({role:e.target.value});
     tr.querySelectorAll('.a-term').forEach(c=>c.onchange=()=>{ const T=[...tr.querySelectorAll('.a-term:checked')].map(x=>x.value); if(!T.length){ toast('Au moins un terminal'); c.checked=true; return; } upd({terminaux:T}); });
     tr.querySelector('[data-a=act]').onclick=()=>{ if(u.actif&&!confirm('Désactiver '+idOf(u.email)+' ? Il ne pourra plus se connecter.')) return; upd({actif:!u.actif}); };
+    tr.querySelector('[data-a=mail]').onclick=()=>{ const v=prompt('Adresse e-mail de '+idOf(u.email)+' (laisser vide pour effacer) :',u.email_contact||''); if(v===null) return; upd({email_contact:v.trim()}); };
     tr.querySelector('[data-a=id]').onclick=()=>{ const v=prompt('Nouvel identifiant pour '+idOf(u.email)+' (ex. FELLAH) :',idOf(u.email)); if(!v) return; upd({identifiant:v.trim().toLowerCase()}); };
-    tr.querySelector('[data-a=reset]').onclick=async()=>{ const pw=genPwd(); try{ await adminCall({action:'reset',user_id:id,password:pw}); showPwd('Mot de passe réinitialisé',u.email,pw); }catch(er){ toast(er.message); } };
+    tr.querySelector('[data-a=reset]').onclick=async()=>{ const pw=genPwd(); try{ await adminCall({action:'reset',user_id:id,password:pw}); showPwd('Mot de passe réinitialisé',u.email,pw,{nom:u.nom,mail:u.email_contact,role:u.role,terminaux:u.terminaux}); }catch(er){ toast(er.message); } };
     tr.querySelector('[data-a=del]').onclick=async()=>{ if(!confirm('Supprimer définitivement le compte '+idOf(u.email)+' ? Cette action est irréversible.')) return; try{ await adminCall({action:'delete',user_id:id}); toast('Compte supprimé'); accLoaded=false; render(); }catch(er){ toast(er.message); } };
   });
 }
