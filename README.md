@@ -159,3 +159,10 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 
 ## v7.12 — Poste affiché sur l'écran Direction
 - Chaque portique en opération affiche le poste à quai du navire (ex. P83), tel que saisi dans l'application (clic sur le poste en vue complète sur ordinateur).
+
+## v7.13 — Robustesse (écran figé)
+- Service worker : si le réseau ne répond pas en 6 s, l'application s'ouvre depuis le cache au lieu de rester bloquée.
+- Menu ☰ → « Recharger l'application (vider le cache) » : désinscrit le service worker, vide le cache et recharge la page.
+
+## v7.14 — Vue mobile lisible en mode sombre
+- Corrige le texte quasi invisible de la vue mobile / Direction quand le téléphone est en mode sombre : la vue mobile garde maintenant toujours son style clair bleu/blanc.

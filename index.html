@@ -153,6 +153,8 @@ body.dirmode #snapSel,body.dirmode label[for=snapSel],body.dirmode #btnImport,bo
 .d-tot{background:var(--bg2);border-radius:14px;padding:8px 10px;margin:2px 0 10px}.d-tot .m-two{margin-top:2px}
 .d-warn{background:#fbefd6;color:#a86a00;border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:13.5px}
 @media(min-width:700px){body.mobpilot{background:#dfe7ee}body.mobpilot .wrap{background:#fff;min-height:100vh;box-shadow:0 0 0 1px #cfd9e3,0 8px 30px rgba(31,58,110,.12)}}
+/* la vue mobile garde toujours son style clair bleu/blanc, même si le téléphone est en mode sombre */
+body.mobpilot{color-scheme:light;--bg:#ffffff;--surface:#ffffff;--surface-2:#f5f7f8;--line:#d6dce1;--grid:#e4e8eb;--fg:#10202b;--fg-2:#4a5b67;--fg-3:#76858f;--accent:#0b5c6b;--accent-ink:#ffffff;--track:#dde3e7;--good:#12805c;--warn:#a86a00;--crit:#b3261e;--info:#245fa8;--good-bg:#e0f3ec;--warn-bg:#fbefd6;--crit-bg:#fbe3e1;--info-bg:#e1ebf8;--nv:#1f3a6e;--bl:#3b82c4;--bg2:#e8eef3;--ln:#1f3a6e;color:#1f3a6e}
 body.mobpilot header.top,body.mobpilot #drop{display:none}
 body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 .m{--nv:#1f3a6e;--bl:#3b82c4;--bg2:#e8eef3;--ln:#1f3a6e;color:#1f3a6e;font-family:var(--f-body)}
@@ -822,9 +824,10 @@ const IC={
 function mTop(title,sub,back,noChip){
   return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
     <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div>${noChip?'<span style="width:44px"></span>':`<button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TC3':termSel()}${myTerms().length>1?' ⇄':''}</button>`}</div>
-  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab==='dir'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':'<button type="button" data-m="dir">Direction</button>'}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
+  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab==='dir'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':'<button type="button" data-m="dir">Direction</button>'}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
+async function hardReload(){ toast('Rechargement…'); try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){} location.reload(); }
 function mBind(){
   document.querySelectorAll('#app [data-m]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.m, v=b.dataset.v;
@@ -835,6 +838,7 @@ function mBind(){
     if(a==='back'){ if(history.state&&history.state.m) history.back(); else { mScr='list'; render(); } return; }
     if(a==='ref'){ lastSig=''; loadSnaps(); toast('Actualisation…'); return; }
     if(a==='pwd'){ pwdModal(); return; }
+    if(a==='reset'){ hardReload(); return; }
     if(a==='drv'||a==='ana'||a==='acc'||a==='dir'){ tab=a; if(a==='dir'){ try{ history.replaceState(null,'','#direction'); }catch(e){} } render(); window.scrollTo(0,0); return; }
     if(a==='pilot'){ tab='pilot'; mScr='list'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} render(); window.scrollTo(0,0); return; }
     if(a==='full'){ try{ localStorage.setItem('fullView','1'); }catch(e){} if(tab==='dir'){ tab='pilot'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} } render(); return; }
