@@ -412,12 +412,12 @@ function liveCalc(){
     const mv=hs.reduce((a,h)=>a+h.cranes.filter(c=>ids.has(c.id)).reduce((x,c)=>x+(c.moves||0),0),0), tot=(v.acc||0)+(v.rem||0);
     const unreliable=overRun(mv,v.rem), rem=unreliable?v.rem:Math.max(0,v.rem-mv);
     const last=hs.slice(-2), rate=last.reduce((a,h)=>a+h.cranes.filter(c=>ids.has(c.id)).reduce((x,c)=>x+(c.moves||0),0),0)/last.length;
-    LV.set(v,{mv,n:hs.length,gaps,upto,unreliable,rem,acc:unreliable?v.acc:tot-rem,rate}); });
+    LV.set(v,{mv,n:hs.length,gaps,upto,unreliable,fin:!unreliable&&mv>=v.rem,rem,acc:unreliable?v.acc:tot-rem,rate}); });
 }
-const pct=v=>{ const t=(v.acc||0)+(v.rem||0); return t?100*ac(v)/t:null; };
+const pct=v=>{ const t=(v.acc||0)+(v.rem||0), l=LV.get(v); if(!t) return null; const p=100*ac(v)/t; return l&&l.fin&&!l.unreliable&&v.rem>0?Math.min(99.9,p):p; };   /* 100 % seulement quand le rapport de shift confirme 0 restant */
 function eta(v,s){ const L=LV.get(v); if(L&&L.unreliable&&v.rem>0) return {txt:'À confirmer',h:null};
   const R=L&&!L.unreliable?L:null, rem=R?R.rem:v.rem, rate=R&&R.rate>0?R.rate:act(v).reduce((a,c)=>a+(c.gmph||0),0), base=R?lt(R.upto):lt(s);
-  if(!rem) return {txt:R?'Terminé (estimé)':'Terminé',h:0}; if(!rate) return {txt:'—',h:null};
+  if(!rem) return {txt:R?'Fin imminente':'Terminé',h:0}; if(!rate) return {txt:'—',h:null};
   const h=rem/rate, t=new Date(base+h*3600000), mm=Math.round(h*60);
   return {h,txt:'≈ '+(mm>=60?Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0'):mm+' min'),clock:t.toLocaleTimeString('fr-FR',{timeZone:'UTC',hour:'2-digit',minute:'2-digit'})}; }
 function alertsFor(s){
@@ -565,14 +565,15 @@ function catTable(v){
   const L=LV.get(v), lv=L&&!L.unreliable?L:null;
   return `<table class="cat"><thead><tr><th>Rubrique</th><th class="r">Réalisé</th><th class="r">Restant</th></tr></thead><tbody>
   ${have.map(([l,a,b])=>`<tr><td>${l}</td><td class="r num">${a==null?ND:fmt(a)}</td><td class="r num">${b==null?ND:fmt(b)}</td></tr>`).join('')}
-  <tr class="tot"><td>Total rapport de shift</td><td class="r num">${fmt(v.shiftTotal)}</td><td class="r num">${fmt(v.rem)}</td></tr>
-  ${lv?`<tr><td>+ grues depuis le rapport</td><td class="r num">+ ${fmt(lv.mv)}</td><td class="r num">− ${fmt(lv.mv)}</td></tr><tr class="tot est2"><td>Situation estimée à ${hTime(lv.upto)}</td><td class="r num">${fmt((v.shiftTotal||0)+lv.mv)}</td><td class="r num">${fmt(lv.rem)}</td></tr>`:''}</tbody></table>
+  <tr class="tot"><td>Total rapport de shift (${LT(lastSnap(),{hour:'2-digit',minute:'2-digit'})})</td><td class="r num">${fmt(v.shiftTotal)}</td><td class="r num">${fmt(v.rem)}</td></tr>
+  ${lv?`<tr><td>+ grues depuis le rapport</td><td class="r num">+ ${fmt(lv.mv)}</td><td class="r num">− ${fmt(lv.mv)}</td></tr><tr class="tot est2"><td>Situation estimée à ${hTime(lv.upto)}${lv.fin?' (fin à confirmer)':''}</td><td class="r num">${fmt((v.shiftTotal||0)+lv.mv)}</td><td class="r num">${fmt(lv.rem)}</td></tr>`:''}</tbody></table>
   ${nd.length?`<div class="vv" style="margin-top:6px">Non fournis par les rapports actuels (demandés à l'IT) : ${nd.join(' · ')}</div>`:''}`;
 }
 function liveNote(v,s){
   const L=LV.get(v); if(!L) return '';
   const t=LT(s,{hour:'2-digit',minute:'2-digit'}), u=hTime(L.upto);
   if(L.unreliable) return `<div class="est" style="margin-top:8px;border-color:var(--warn);background:var(--warn-bg);color:var(--warn)">Mise à jour horaire non appliquée : les grues de ce navire ont fait ${fmt(L.mv)} mouvements depuis le rapport de shift de ${t}, plus que le restant connu (${fmt(v.rem)}) — navire presque terminé, grues réaffectées ou rapport de shift en attente. Chiffres du rapport de shift conservés jusqu'au prochain rapport.</div>`;
+  if(L.fin) return `<div class="est" style="margin-top:8px;border-color:var(--warn);background:var(--warn-bg);color:var(--warn)"><b>Fin imminente (à confirmer)</b> : les grues du navire ont fait <b>${fmt(L.mv)}</b> mouvement(s) depuis le rapport de shift de ${t} (jusqu'à ${u}), pour ${fmt(v.rem)} restant(s) à l'époque. La fin est estimée, pas confirmée : le restant réel sera connu au prochain rapport de shift.</div>`;
   return `<div class="est" style="margin-top:8px">Mis à jour avec les rapports horaires jusqu'à <b>${u}</b> : rapport de shift de ${t} + <b>${fmt(L.mv)}</b> mouvement(s) des grues du navire sur ${L.n} h (estimation).${L.gaps?` <b>${L.gaps} fenêtre(s) horaire(s) manquante(s)</b> : valeur probablement sous-estimée.`:''}</div>`;
 }
 function vesselCard(v,s){

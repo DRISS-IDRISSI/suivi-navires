@@ -135,3 +135,7 @@ Le filtre « Par shift » (téléphone) limitait la date au jour du dernier rapp
 ## v7.6 — estimation en direct : cas du navire presque terminé
 
 Le dépassement toléré entre les mouvements des grues (rapports horaires) et le restant du dernier rapport de shift passe de +10 à +10 ou +25 % du restant (le plus grand) : le shifting de fin d'escale ne suspend plus l'estimation à tort ; un navire dont le restant est épuisé s'affiche « Terminé (estimé) ». Quand l'estimation est suspendue, l'heure de fin n'est plus affichée (elle était calculée depuis le dernier rapport de shift et devenait fausse) : « À confirmer », et le message indique le nombre de mouvements des grues et les causes possibles (navire presque terminé, grues réaffectées, rapport de shift en attente).
+
+## v7.7 — plus de « 100 % » estimé
+
+Un avancement de 100 % (ou « Terminé ») n'est affiché que lorsque le rapport de shift confirme 0 restant. Quand les grues ont fait au moins le restant du dernier rapport, le navire passe en « Fin imminente » : 99,9 % maximum, restant estimé à 0, encadré orange expliquant que la fin est à confirmer au prochain rapport de shift. Le tableau détaillé indique l'heure du rapport de shift dans « Total rapport de shift (hh:mm) » et « fin à confirmer » sur la ligne de situation estimée.
