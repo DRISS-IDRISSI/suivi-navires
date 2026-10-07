@@ -127,3 +127,11 @@ Après la création d'un compte ou la réinitialisation d'un mot de passe, la fe
 ## v7.4 — envoi automatique des accès par e-mail (Brevo)
 
 La fonction `admin-users` envoie, à la création d'un compte ou à la réinitialisation d'un mot de passe, le message d'accès (identifiant, mot de passe provisoire, mode d'emploi téléphone / ordinateur, installation, lien du guide) à l'adresse e-mail du compte, via l'API Brevo. Secrets à créer dans Supabase (Edge Functions > Secrets) : `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` (expéditeur validé dans Brevo), éventuellement `BREVO_SENDER_NAME` et `APP_URL`. Sans ces secrets, tout fonctionne comme avant (envoi manuel). Case « Envoyer l'accès par e-mail » dans le formulaire de création.
+
+## v7.5 — vue par shift : jour en cours sélectionnable
+
+Le filtre « Par shift » (téléphone) limitait la date au jour du dernier rapport de shift reçu : le shift du jour (en cours) n'était pas sélectionnable. La date maximale est maintenant le jour en cours (heure du Maroc), et l'écran s'ouvre par défaut sur le shift en cours quand des rapports horaires sont disponibles. Le shift en cours est calculé avec les rapports horaires des grues (total des mouvements) ; le détail par rubrique (import, export, etc.) arrive avec le rapport de fin de shift.
+
+## v7.6 — estimation en direct : cas du navire presque terminé
+
+Le dépassement toléré entre les mouvements des grues (rapports horaires) et le restant du dernier rapport de shift passe de +10 à +10 ou +25 % du restant (le plus grand) : le shifting de fin d'escale ne suspend plus l'estimation à tort ; un navire dont le restant est épuisé s'affiche « Terminé (estimé) ». Quand l'estimation est suspendue, l'heure de fin n'est plus affichée (elle était calculée depuis le dernier rapport de shift et devenait fausse) : « À confirmer », et le message indique le nombre de mouvements des grues et les causes possibles (navire presque terminé, grues réaffectées, rapport de shift en attente).

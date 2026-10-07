@@ -403,18 +403,20 @@ const prevOf=s=>{ const i=snaps.indexOf(s); return i>0?snaps[i-1]:null; };
 /* ---- mise a jour en continu : rapport de shift (base officielle) + mouvements des grues du navire dans les rapports horaires recus depuis ---- */
 let LV=new WeakMap();
 const ac=v=>{const l=LV.get(v);return l?l.acc:v.acc;}, rm=v=>{const l=LV.get(v);return l?l.rem:v.rem;};
+const overRun=(mv,rem)=>mv>(rem||0)+Math.max(10,Math.round((rem||0)*0.25));   /* depassement tolere : restants de fin d'escale + shifting */
 function liveCalc(){
   LV=new WeakMap(); const s=lastSnap(); if(!s||!hours.length) return;
   const hs=hours.filter(h=>h.ts-HR>=s.ts-10*60000); if(!hs.length) return;
   const cv=craneVessel(s), upto=hs[hs.length-1], expected=Math.round((lt(upto)-Math.floor(lt(s)/HR)*HR)/HR), gaps=Math.max(0,expected-hs.length);
   s.vessels.forEach(v=>{ if(!(v.rem>0)) return; const ids=new Set(v.cranes.filter(c=>cv.get(c.id)===v).map(c=>c.id)); if(!ids.size) return;
     const mv=hs.reduce((a,h)=>a+h.cranes.filter(c=>ids.has(c.id)).reduce((x,c)=>x+(c.moves||0),0),0), tot=(v.acc||0)+(v.rem||0);
-    const unreliable=mv>v.rem+10, rem=unreliable?v.rem:Math.max(0,v.rem-mv);
+    const unreliable=overRun(mv,v.rem), rem=unreliable?v.rem:Math.max(0,v.rem-mv);
     const last=hs.slice(-2), rate=last.reduce((a,h)=>a+h.cranes.filter(c=>ids.has(c.id)).reduce((x,c)=>x+(c.moves||0),0),0)/last.length;
     LV.set(v,{mv,n:hs.length,gaps,upto,unreliable,rem,acc:unreliable?v.acc:tot-rem,rate}); });
 }
 const pct=v=>{ const t=(v.acc||0)+(v.rem||0); return t?100*ac(v)/t:null; };
-function eta(v,s){ const L=LV.get(v), R=L&&!L.unreliable?L:null, rem=R?R.rem:v.rem, rate=R&&R.rate>0?R.rate:act(v).reduce((a,c)=>a+(c.gmph||0),0), base=R?lt(R.upto):lt(s);
+function eta(v,s){ const L=LV.get(v); if(L&&L.unreliable&&v.rem>0) return {txt:'À confirmer',h:null};
+  const R=L&&!L.unreliable?L:null, rem=R?R.rem:v.rem, rate=R&&R.rate>0?R.rate:act(v).reduce((a,c)=>a+(c.gmph||0),0), base=R?lt(R.upto):lt(s);
   if(!rem) return {txt:R?'Terminé (estimé)':'Terminé',h:0}; if(!rate) return {txt:'—',h:null};
   const h=rem/rate, t=new Date(base+h*3600000), mm=Math.round(h*60);
   return {h,txt:'≈ '+(mm>=60?Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0'):mm+' min'),clock:t.toLocaleTimeString('fr-FR',{timeZone:'UTC',hour:'2-digit',minute:'2-digit'})}; }
@@ -447,7 +449,7 @@ function estimate(v,s){
   const mv=hs.reduce((a,h)=>a+h.cranes.filter(c=>ids.has(c.id)).reduce((x,c)=>x+(c.moves||0),0),0);
   const rem=Math.max(0,(v.rem||0)-mv), tot=(v.acc||0)+(v.rem||0), acc=tot-rem;
   /* incoherent : les grues ont fait bien plus que le restant connu -> reaffectation ou travail ajoute, estimation non fiable */
-  const unreliable=mv>(v.rem||0)+10;
+  const unreliable=overRun(mv,v.rem);
   return {mv,rem,pct:tot?100*acc/tot:null,n:hs.length,upto:hs[hs.length-1],unreliable};
 }
 function hourlyAlerts(){
@@ -570,7 +572,7 @@ function catTable(v){
 function liveNote(v,s){
   const L=LV.get(v); if(!L) return '';
   const t=LT(s,{hour:'2-digit',minute:'2-digit'}), u=hTime(L.upto);
-  if(L.unreliable) return `<div class="est" style="margin-top:8px;border-color:var(--warn);background:var(--warn-bg);color:var(--warn)">Mise à jour horaire non appliquée : les grues de ce navire ont fait ${fmt(L.mv)} mouvements depuis le rapport de shift de ${t}, plus que le restant connu (${fmt(v.rem)}) — réaffectation probable. Chiffres du rapport de shift conservés jusqu'au prochain rapport.</div>`;
+  if(L.unreliable) return `<div class="est" style="margin-top:8px;border-color:var(--warn);background:var(--warn-bg);color:var(--warn)">Mise à jour horaire non appliquée : les grues de ce navire ont fait ${fmt(L.mv)} mouvements depuis le rapport de shift de ${t}, plus que le restant connu (${fmt(v.rem)}) — navire presque terminé, grues réaffectées ou rapport de shift en attente. Chiffres du rapport de shift conservés jusqu'au prochain rapport.</div>`;
   return `<div class="est" style="margin-top:8px">Mis à jour avec les rapports horaires jusqu'à <b>${u}</b> : rapport de shift de ${t} + <b>${fmt(L.mv)}</b> mouvement(s) des grues du navire sur ${L.n} h (estimation).${L.gaps?` <b>${L.gaps} fenêtre(s) horaire(s) manquante(s)</b> : valeur probablement sous-estimée.`:''}</div>`;
 }
 function vesselCard(v,s){
@@ -843,7 +845,7 @@ function mGlob(s,v){
   return mTop(`${esc(v.name)}`,`Escale ${esc(v.visit)} · VUE GLOBALE`,true)
   +`<div class="m-body"><section class="m-box"><div class="m-big"><strong>${p==null?'—':fmt(p,1)+' %'}</strong><span>${esc(v.phase)}</span></div>${mBar(p)}
     <div class="m-two"><div><b>${fmt(ac(v))}</b><span>faits</span></div><div><b>${fmt(rm(v))}</b><span>restants</span></div><div><b>${v.rem===0?'Terminé':esc(e.txt)}</b><span>${e.clock?'fin vers '+e.clock:'fin estimée'}</span></div></div>
-    ${L&&!L.unreliable?`<p class="m-note">Rapport de shift + ${fmt(L.mv)} mouvement(s) des grues jusqu'à ${hTime(L.upto)}${L.gaps?` · ${L.gaps} heure(s) manquante(s)`:''} (estimation)</p>`:L?`<p class="m-note m-w">Mise à jour horaire suspendue : réaffectation probable des grues.</p>`:''}</section>
+    ${L&&!L.unreliable?`<p class="m-note">Rapport de shift + ${fmt(L.mv)} mouvement(s) des grues jusqu'à ${hTime(L.upto)}${L.gaps?` · ${L.gaps} heure(s) manquante(s)`:''} (estimation)</p>`:L?`<p class="m-note m-w">Mise à jour horaire suspendue : les grues ont fait ${fmt(L.mv)} mouvements depuis le rapport de shift (restant connu ${fmt(v.rem)}). Navire presque terminé, grues réaffectées ou rapport de shift en attente ; chiffres du dernier rapport conservés.</p>`:''}</section>
   ${mRow(IC.imp,'Import',n(v.remImp!=null||v.remImpF!=null?(v.remImp!=null?v.remImp:(v.remImpF||0)+(v.remImpE||0)):null)+'<small> restant</small>',impTxt)}
   ${mRow(IC.exp,'Export plein',n(v.remF)+'<small> restant</small>',both(v.expF,v.remF))}
   ${mRow(IC.exp,'Export vide',n(v.remE)+'<small> restant</small>',both(v.expE,v.remE))}
@@ -854,9 +856,12 @@ function mGlob(s,v){
 }
 let mShDate=null, mShCodes=null;
 function mShift(s,v){
-  const days=[...new Set(snaps.map(dayOf).filter(Boolean))].sort(), lastDay=dayOf(s)||days[days.length-1];
-  if(!mShDate) mShDate=lastDay; if(!mShCodes) mShCodes=[shiftCode(s)].filter(c=>/S[123]/.test(c)); if(!mShCodes.length) mShCodes=['S1'];
+  const days=[...new Set(snaps.map(dayOf).filter(Boolean))].sort(), lastSnapDay=dayOf(s)||days[days.length-1];
   const ids=asg(v,s,craneVessel(s)), live=liveShift(), liveDay=live?new Date(live.start).toISOString().slice(0,10):null;
+  let today=''; try{ today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Casablanca'}); }catch(e){}
+  const lastDay=[lastSnapDay,liveDay,today].filter(Boolean).sort().pop();   /* le shift du jour (en cours) doit etre selectionnable */
+  if(!mShDate){ if(live){ mShDate=liveDay; if(!mShCodes) mShCodes=[live.code]; } else mShDate=lastSnapDay; }
+  if(!mShCodes) mShCodes=[shiftCode(s)].filter(c=>/S[123]/.test(c)); if(!mShCodes.length) mShCodes=['S1'];
   const by={}; snaps.forEach(x=>{ if(dayOf(x)===mShDate){ const c=shiftCode(x); if(!by[c]||x.ts>by[c].ts) by[c]=x; } });
   const A={imp:null,expF:null,expE:null,sh:null,land:null,rel:null,oog:null,hatch:null,tot:null}, add=(k,x)=>{ if(x!=null) A[k]=(A[k]||0)+x; }, notes=[];
   let crane=new Map(); ids.forEach(i=>crane.set(i,{m:0,h:0}));
