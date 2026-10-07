@@ -152,3 +152,7 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 - L'écran **Direction** fusionne TC3 (STS1–STS4) et TCE (PT) sur une seule page, avec le même style bleu/blanc que l'accueil mobile.
 - N'affiche **que les portiques en opération** (au moins 1 mouvement sur le dernier rapport horaire) : mouvements de la dernière heure, S1/S2/S3 de la journée choisie, barres horaires, total par terminal.
 - Accès : menu ☰ → Direction (ou lien `#direction`). Retour : ☰ → Pilotage (escales).
+
+## v7.11 — Vue mobile par défaut sur ordinateur
+- L'application s'affiche désormais en **vue mobile** (colonne bleu/blanc centrée) aussi sur PC, pour Pilotage et Direction.
+- Menu ☰ → « Version complète (tableaux détaillés) » pour passer à l'ancienne vue large ; bouton « Vue mobile » pour revenir. Le choix est mémorisé sur l'appareil.

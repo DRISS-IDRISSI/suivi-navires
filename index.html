@@ -151,7 +151,7 @@ body.dirmode #snapSel,body.dirmode label[for=snapSel],body.dirmode #btnImport,bo
 .d-hr b{font-size:9.5px;font-weight:600;line-height:1.2}.d-hr u{text-decoration:none;font-size:8.5px;color:#7a8aa0}
 .d-tot{background:var(--bg2);border-radius:14px;padding:8px 10px;margin:2px 0 10px}.d-tot .m-two{margin-top:2px}
 .d-warn{background:#fbefd6;color:#a86a00;border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:13.5px}
-@media(min-width:760px){body.dirwide .wrap{max-width:900px}.d-grid{grid-template-columns:1fr 1fr}.m-kpi{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:700px){body.mobpilot{background:#dfe7ee}body.mobpilot .wrap{background:#fff;min-height:100vh;box-shadow:0 0 0 1px #cfd9e3,0 8px 30px rgba(31,58,110,.12)}}
 body.mobpilot header.top,body.mobpilot #drop{display:none}
 body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 .m{--nv:#1f3a6e;--bl:#3b82c4;--bg2:#e8eef3;--ln:#1f3a6e;color:#1f3a6e;font-family:var(--f-body)}
@@ -251,7 +251,7 @@ const myTerms=()=>(me&&me.terminaux&&me.terminaux.length?me.terminaux:['TCE','TC
 /* terminal affiche : TCE (portiques PT, conducteurs CC) ou TC3 (STS1-4, RTG) ; sur ordinateur « Tous » par defaut */
 let TSEL=(()=>{try{return localStorage.getItem('term')||'';}catch(e){return '';}})();
 const TK={TCE:'TCE',TC3:'TC3PC'};
-const termSel=()=>{ const A=myTerms(); let t=TSEL==='TCE'||TSEL==='TC3'||TSEL==='ALL'?TSEL:(window.matchMedia('(max-width:700px)').matches?'TC3':'ALL');
+const termSel=()=>{ const A=myTerms(); let t=TSEL==='TCE'||TSEL==='TC3'||TSEL==='ALL'?TSEL:(!fullView()?'TC3':'ALL');
   if(A.length===1) return A[0]; if(t!=='ALL'&&!A.includes(t)) t=A[0]; return t; };
 function setTerm(t){ if(t!=='ALL'&&!myTerms().includes(t)) return; TSEL=t; try{localStorage.setItem('term',t);}catch(e){} mScr='list'; mMenu=false; render(); window.scrollTo(0,0); }
 const inTerm=(v,s,cv)=>{ const t=termSel(); return t==='ALL'||vTerms(v,s,cv).includes(TK[t]); };
@@ -800,8 +800,8 @@ function renderDrv(){
 /* ---------- version telephone (vue simplifiee : liste des escales -> vue globale / rendement / portiques) ---------- */
 let mScr='list', mVisit=null, mMenu=false;
 const mq=window.matchMedia('(max-width:700px)');
-const fullView=()=>{ try{ return sessionStorage.getItem('fullView')==='1'; }catch(e){ return false; } };
-const isMob=()=>mq.matches&&!fullView();
+const fullView=()=>{ try{ return localStorage.getItem('fullView')==='1'; }catch(e){ return false; } };
+const isMob=()=>!fullView();   /* vue mobile par défaut, y compris sur ordinateur */
 (mq.addEventListener?mq.addEventListener.bind(mq,'change'):mq.addListener.bind(mq))(()=>{ if(session) render(); });
 function mShReset(){ mShDate=null; mShCodes=null; }
 window.addEventListener('popstate',()=>{ if(mScr!=='list'){ mScr='list'; mMenu=false; if(session) render(); } });
@@ -821,7 +821,7 @@ const IC={
 function mTop(title,sub,back,noChip){
   return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
     <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div>${noChip?'<span style="width:44px"></span>':`<button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TC3':termSel()}${myTerms().length>1?' ⇄':''}</button>`}</div>
-  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab==='dir'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':'<button type="button" data-m="dir">Direction</button>'}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="full">Version complète (ordinateur)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
+  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab==='dir'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':'<button type="button" data-m="dir">Direction</button>'}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
 function mBind(){
@@ -836,7 +836,7 @@ function mBind(){
     if(a==='pwd'){ pwdModal(); return; }
     if(a==='drv'||a==='ana'||a==='acc'||a==='dir'){ tab=a; if(a==='dir'){ try{ history.replaceState(null,'','#direction'); }catch(e){} } render(); window.scrollTo(0,0); return; }
     if(a==='pilot'){ tab='pilot'; mScr='list'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} render(); window.scrollTo(0,0); return; }
-    if(a==='full'){ try{ sessionStorage.setItem('fullView','1'); }catch(e){} if(tab==='dir'){ tab='pilot'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} } render(); return; }
+    if(a==='full'){ try{ localStorage.setItem('fullView','1'); }catch(e){} if(tab==='dir'){ tab='pilot'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} } render(); return; }
     if(a==='out'){ sb.auth.signOut(); return; }
     if(a==='glob'||a==='shift'||a==='port'){ if(a==='shift') mShReset(); mScr=a; mVisit=v; try{ history.pushState({m:1},''); }catch(e){} render(); window.scrollTo(0,0); }
   });
@@ -981,7 +981,7 @@ function render(){
   if(tab==='acc'){ renderAcc(); return; }
   if(tab==='drv'){ renderDrv(); return; }
   if(tab==='dir'){ renderDir(); return; }
-  liveCalc(); document.body.classList.remove('mobpilot'); { const sg=$('#termSeg'); sg.hidden=!(session&&me&&myTerms().length>1&&(tab==='pilot'||tab==='drv')); sg.querySelectorAll('[data-t]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.t===termSel()); b.onclick=()=>setTerm(b.dataset.t); }); } $('#btnMob').hidden=!(mq.matches&&fullView());
+  liveCalc(); document.body.classList.remove('mobpilot'); { const sg=$('#termSeg'); sg.hidden=!(session&&me&&myTerms().length>1&&(tab==='pilot'||tab==='drv')); sg.querySelectorAll('[data-t]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.t===termSel()); b.onclick=()=>setTerm(b.dataset.t); }); } $('#btnMob').hidden=!fullView();
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
     app.innerHTML=`<div class="empty"><b>Aucun rapport pour l'instant</b>Les rapports arrivent automatiquement depuis la boîte mail, ou importez un fichier. Le tableau de bord affichera les quais, l'avancement de chaque navire et le rendement des portiques.</div>`; return; }
@@ -1272,7 +1272,7 @@ $('#btnPwd').onclick=()=>pwdModal();
 
 /* ---------- boot ---------- */
 $('#btnOut').onclick=()=>sb.auth.signOut();
-$('#btnMob').onclick=()=>{ try{ sessionStorage.removeItem('fullView'); }catch(e){} render(); };
+$('#btnMob').onclick=()=>{ try{ localStorage.removeItem('fullView'); }catch(e){} render(); };
 async function loadProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('user_id',session.user.id).maybeSingle();
   if(error){ me={role:'responsable',terminaux:['TCE','TC3'],email:session.user.email,legacy:true}; meState='legacy'; }   /* table pas encore creee : comportement d'avant */
