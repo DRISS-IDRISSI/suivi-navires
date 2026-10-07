@@ -89,3 +89,10 @@ Chaque rapport horaire reçu met à jour automatiquement, sur l'onglet Pilotage,
 ## v6 — version téléphone
 
 Sur un écran de téléphone (largeur ≤ 700 px) l'onglet Pilotage devient une application simplifiée : liste des escales (avancement, faits/restants, boutons Vue globale / Rendement / Portiques), puis écrans détaillés (import, export, transbordement, débarquement/réembarquement, hors gabarit, shifting, panneaux ; rendement des grues par shift ; mouvements par heure de chaque portique). Le menu ☰ donne accès à Actualiser, Conducteurs, Analyse, Version complète et Déconnexion. Le bouton « Vue mobile » de la version complète permet d'y revenir.
+
+## v6.1 — deux terminaux indépendants
+
+Le bouton **TC3 ⇄** en haut du téléphone (et le sélecteur TCE / TC3 / Tous sur ordinateur) bascule entre les deux terminaux :
+- **TCE** : navires travaillant avec PT05, PT08, PT09, PT10, PT11 ; conducteurs CC (cavaliers, feuille « SC » du rapport conducteurs) ; pas de section RTG.
+- **TC3** : navires travaillant avec STS1 à STS4 ; conducteurs RTG ; rapport horaire RTG.
+Les navires sans portique connu (terminés, ex. RORO) apparaissent sous « Non rattachés à un terminal ». Le choix est mémorisé sur l'appareil. L'onglet Analyse reste global.

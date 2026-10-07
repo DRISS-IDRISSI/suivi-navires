@@ -140,7 +140,9 @@ body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 .m button{font-family:inherit}
 .m-top{position:sticky;top:0;z-index:6;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid #d5dde5}
 .m-t{font-size:20px;letter-spacing:.01em;color:var(--nv)}.m-t b{font-weight:800}
-.m-chip{background:var(--bl);color:#fff;font-weight:700;border-radius:10px;padding:8px 16px;font-size:18px}
+.m-chip{background:var(--bl);color:#fff;font-weight:700;border-radius:10px;padding:8px 14px;font-size:18px;border:0;min-height:0}
+#termSeg{margin-top:12px;display:inline-flex}
+#termSeg button{font-weight:600}
 .m-ic{background:none;border:0;padding:6px;min-height:0;color:var(--nv)}.m-ic svg{width:34px;height:34px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block}
 .m-menu{background:#fff;border-bottom:1px solid #d5dde5;display:flex;flex-direction:column}
 .m-menu button{background:#fff;border:0;border-top:1px solid #edf1f5;text-align:left;padding:14px 18px;font-size:16px;color:var(--nv);border-radius:0}
@@ -191,6 +193,7 @@ body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
     <input id="file" type="file" accept=".xlsx,.xls" multiple hidden>
   </div>
 </div>
+<div class="seg" id="termSeg" role="group" aria-label="Terminal" hidden><button type="button" data-t="TCE">TCE</button><button type="button" data-t="TC3">TC3</button><button type="button" data-t="ALL">Tous</button></div>
 <nav class="tabs" id="tabs" aria-label="Rubriques"><button type="button" data-tab="pilot">Pilotage</button><button type="button" data-tab="drv">Conducteurs</button><button type="button" data-tab="ana">Analyse</button></nav></header>
 
 <div class="drop" id="drop">Import manuel (secours) : glissez ici le rapport horaire (REP_QUAY_CRANE_DELAYS&hellip;) ou le rapport de fin de shift (REP_MM_END_SHIFT&hellip;). En fonctionnement normal, les rapports arrivent seuls depuis la bo&icirc;te mail.</div>
@@ -209,6 +212,16 @@ const fmt=(n,d=0)=>n==null||isNaN(n)?'—':Number(n).toLocaleString('fr-FR',{min
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const SERIES=['--s1','--s2','--s3','--s4','--s5','--s6'];
 let snaps=[], hours=[], sel=null, metric='rem', THR=10, IDLE_H=2, db=null;
+/* terminal affiche : TCE (portiques PT, conducteurs CC) ou TC3 (STS1-4, RTG) ; sur ordinateur « Tous » par defaut */
+let TSEL=(()=>{try{return localStorage.getItem('term')||'';}catch(e){return '';}})();
+const TK={TCE:'TCE',TC3:'TC3PC'};
+const termSel=()=>TSEL==='TCE'||TSEL==='TC3'||TSEL==='ALL'?TSEL:(window.matchMedia('(max-width:700px)').matches?'TC3':'ALL');
+function setTerm(t){ TSEL=t; try{localStorage.setItem('term',t);}catch(e){} mScr='list'; mMenu=false; render(); window.scrollTo(0,0); }
+const inTerm=(v,s,cv)=>{ const t=termSel(); return t==='ALL'||vTerms(v,s,cv).includes(TK[t]); };
+const unTerm=(v,s,cv)=>{ const t=vTerms(v,s,cv); return !t.includes('TCE')&&!t.includes('TC3PC'); };
+const termVs=s=>{ const cv=craneVessel(s); return s.vessels.filter(v=>inTerm(v,s,cv)); };
+const otherVs=s=>{ if(termSel()==='ALL') return []; const cv=craneVessel(s); return s.vessels.filter(v=>unTerm(v,s,cv)); };
+const showTerm=t=>termSel()==='ALL'||t==='Autre'||TK[termSel()]===t;
 let tab='pilot', dayKey=null, GT=20, meta={}, rtgs=[], drivers=[], drvKey=null, OBJ={rtg:15,sc:10}, SHF=40;
 
 /* ---------- parsing ---------- */
@@ -514,7 +527,7 @@ function quaysHtml(s){
       :`<tr><td colspan="6" class="vv" style="padding:12px 8px">Aucun navire en cours sur ce terminal.</td></tr>`;
     return `<div class="term"><h3>${t==='Autre'?'Autres portiques':t} <span class="vv">${(TERM[t]||[]).join(' · ')}</span><span class="vv">· ${L.length} navire${L.length>1?'s':''} · ${fmt(rem)} mouvements restants${free.length?' · libres : '+free.join(', '):''}</span></h3>
       <div class="tw card" style="padding:4px 10px;margin-top:0"><table><thead><tr><th>Poste</th><th>Navire</th><th>Portiques affectés${lh?' <span class="hint" style="text-transform:none;letter-spacing:0">(mvts dernière heure)</span>':''}</th><th>Avancement</th><th class="r">Restant</th><th>Fin estimée</th></tr></thead><tbody>${rows}</tbody></table></div></div>`; };
-  return `<h2>Situation des quais</h2>${panel('TCE')}${panel('TC3PC')}${panel('Autre')}
+  return `<h2>Situation des quais${termSel()==='ALL'?'':' · '+termSel()}</h2>${showTerm('TCE')?panel('TCE'):''}${showTerm('TC3PC')?panel('TC3PC'):''}${panel('Autre')}
   <p class="note">Poste : saisi par vous (clic sur la cellule), car les rapports actuels ne le contiennent pas. Avancement et restant : rapport de shift + mouvements des grues des rapports horaires reçus depuis (mis à jour chaque heure, estimation) ; portiques : affectation du dernier rapport de shift ; le chiffre à côté de chaque portique = mouvements de la dernière heure, coloré selon son statut horaire.</p>`;
 }
 const ND='<span class="vv">n/d</span>';
@@ -590,7 +603,7 @@ function matrixHtml(){
     const per=codes.map((c,i)=>{ if(D.live&&c===D.live.code&&!D.st[c]) return `<td class="c num" style="background:var(--info-bg)">${fmt(R.reduce((a,r)=>a+(r.lv||0),0))}<span class="vv">en cours</span></td>`; const x=R.reduce((a,r)=>({m:a.m+(r.per[i]?r.per[i].moves:0),h:a.h+(r.per[i]?r.per[i].hours:0),ok:a.ok||!!r.per[i]}),{m:0,h:0,ok:false}); return x.ok?`<td class="c num">${fmt(x.m)}${x.h?' <span class="vv" style="display:inline">· '+fmt(x.m/x.h,1)+'</span>':''}</td>`:'<td class="c z">—</td>'; }).join('');
     const tm=R.reduce((a,r)=>a+r.tm,0), th=R.reduce((a,r)=>a+r.th,0), lv=R.reduce((a,r)=>a+(r.lv||0),0);
     return `<tr class="sub"><td>Total ${t}</td>${per}<td class="c num">${fmt(tm)}${th?' <span class="vv" style="display:inline">· '+fmt(tm/th,1)+'</span>':''}</td></tr>`; };
-  const body=['TCE','TC3PC','Autre'].map(t=>{ const R=rows.filter(r=>termOf(r.id)===t); if(!R.length) return '';
+  const body=['TCE','TC3PC','Autre'].filter(showTerm).map(t=>{ const R=rows.filter(r=>termOf(r.id)===t); if(!R.length) return '';
     return R.map(r=>`<tr><td><b>${esc(r.id)}</b> <span class="vv" style="display:inline">${termOf(r.id)}</span></td>${r.per.map((e,i)=>D.live&&codes[i]===D.live.code&&!D.st[codes[i]]?liveCell(r):cell(e,i)).join('')}<td class="c num"><b>${fmt(r.tm)}</b>${r.th?'<span class="vv">'+fmt(r.tm/r.th,1)+' GMPH</span>':''}</td></tr>`).join('')+sub(t); }).join('');
   return `<h2>Rendement des portiques par shift</h2>
   <div class="ctrls" style="margin-bottom:10px"><label for="daySel" class="sub" style="margin:0">Journée</label><select id="daySel">${days.slice().reverse().map(d=>`<option value="${d}" ${d===dayKey?'selected':''}>${dayLab(d)}</option>`).join('')}</select>
@@ -617,6 +630,7 @@ function rtgShifts(day){
     return {c,n:w.length,per,min:w.length?(w[w.length-1].min||15):15}; });
 }
 function rtgHtml(){
+  if(termSel()==='TCE') return '';
   const g=lastRtg(); if(!g) return `<h2>Parc · RTG</h2><div class="empty" style="padding:18px"><b style="font-size:18px">Pas encore de rapport RTG</b>Les rapports REP_RTG_MOVES_HOURLY apparaîtront ici dès leur réception.</div>`;
   const days=[...new Set(snaps.map(dayOf).filter(Boolean))].sort(); const day=dayKey&&days.includes(dayKey)?dayKey:(days.length?days[days.length-1]:null);
   const prev=rtgs[rtgs.length-2], sh=day?rtgShifts(day):[], min=g.min||15;
@@ -640,6 +654,7 @@ function rtgHtml(){
   <p class="note">Minimum attendu : ${min} mouvements par heure et par RTG. Les shifts sont reconstitués en additionnant les rapports horaires (S1 07–15, S2 15–23, S3 23–07) ; « n/8 h » = nombre de rapports horaires reçus pour ce shift. Journée : ${day?dayLab(day):'—'} (même sélecteur que les portiques). Un RTG à 0 peut être simplement à l'arrêt ou affecté au portail : à confirmer sur le terrain.</p>`;
 }
 function rtgHeat(){
+  if(termSel()==='TCE') return '';
   if(!rtgs.length) return '';
   const last=rtgs.slice(-12).reverse(), ids=[...new Set(last.flatMap(x=>x.rtgs.map(r=>r.id)))].sort();
   return `<h2>Parc · RTG, heure par heure</h2><div class="tw card" style="padding:4px 10px;margin-top:0"><table class="hm"><thead><tr><th>Fenêtre</th>${ids.map(i=>`<th class="r">${esc(i.replace('RTG',''))}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>
@@ -708,17 +723,17 @@ function drvSection(title,rows,obj,kind,d){
 /* points d'attention pour le responsable */
 function drvAlerts(d){
   const out=[];
-  [['RTG',d.rtg,OBJ.rtg],['Cavaliers',d.sc,OBJ.sc]].forEach(([t,rows,obj])=>{
+  [['RTG',d.rtg,OBJ.rtg,'TC3'],['Conducteurs CC',d.sc,OBJ.sc,'TCE']].filter(x=>termSel()==='ALL'||termSel()===x[3]).forEach(([t,rows,obj])=>{
     const L=drvMerge(rows).filter(o=>o.total>0);
     L.filter(o=>o.mph!=null&&o.h>=2&&o.mph<obj*0.6).sort((a,b)=>a.mph-b.mph).forEach(o=>out.push(['warn',t,`${o.name} (${o.engs.map(g=>g.e).join(', ')}) : ${fmt(o.mph,1)} mvts/h sur ${dur(o.dur)} de connexion, objectif ${obj}/h.`]));
     L.filter(o=>o.shp>SHF&&o.total>=15).sort((a,b)=>b.shp-a.shp).forEach(o=>out.push(['info',t,`${o.name} (${o.engs.map(g=>g.e).join(', ')}) : ${fmt(o.shp)} % de shifting (${fmt(o.shifting)} sur ${fmt(o.total)} mouvements).`]));
     const idle=drvMerge(rows).filter(o=>o.total===0&&!o.noSess&&o.dur>=120); if(idle.length) out.push(['warn',t,`${idle.length} conducteur(s) connecté(s) plus de 2 h sans aucun mouvement : ${idle.map(o=>o.name+' ('+dur(o.dur)+')').join(', ')}.`]);
   });
   /* RTG ayant travaille mais absents du rapport horaire RTG sur ce shift (ex. RTG15/RTG16 non listes par le rapport horaire) */
-  const a=dts(d.start.replace(/(\d{4})-(\d{2})-(\d{2})/,'$3/$2/$1')), b=dts(d.end.replace(/(\d{4})-(\d{2})-(\d{2})/,'$3/$2/$1'));
+  if(termSel()!=='TCE'){ const a=dts(d.start.replace(/(\d{4})-(\d{2})-(\d{2})/,'$3/$2/$1')), b=dts(d.end.replace(/(\d{4})-(\d{2})-(\d{2})/,'$3/$2/$1'));
   const w=rtgs.filter(x=>lt(x)>a&&lt(x)<=b);
   if(w.length){ const seen=new Set(w.flatMap(x=>x.rtgs.map(r=>r.id))); const miss=[...new Set(d.rtg.filter(r=>r.total>0&&r.e&&!seen.has(r.e)).map(r=>r.e))];
-    if(miss.length) out.push(['info','RTG',`${miss.join(', ')} ont travaillé sur ce shift mais ne figurent pas dans le rapport horaire RTG : leurs mouvements n'apparaissent donc pas dans le tableau « RTG heure par heure ». À signaler à l'IT.`]); }
+    if(miss.length) out.push(['info','RTG',`${miss.join(', ')} ont travaillé sur ce shift mais ne figurent pas dans le rapport horaire RTG : leurs mouvements n'apparaissent donc pas dans le tableau « RTG heure par heure ». À signaler à l'IT.`]); } }
   return out;
 }
 function renderDrv(){
@@ -732,7 +747,7 @@ function renderDrv(){
     <label class="sub" style="margin:0 0 0 8px">Cavaliers</label><input id="oSc" type="number" min="1" max="60" value="${OBJ.sc}" style="width:70px"><span class="vv">/h</span>
     <label class="sub" style="margin:0 0 0 8px">Alerte shifting</label><input id="oSh" type="number" min="5" max="95" value="${SHF}" style="width:70px"><span class="vv">%</span></div>
   <h2 style="margin-top:6px">Points d'attention</h2><div class="alerts">${al.length?al.map(a=>`<div class="al"><span class="pill ${pc[a[0]]}">${esc(a[1])}</span><span>${esc(a[2])}</span></div>`).join(''):'<div class="al"><span class="pill p-good">RAS</span><span>Aucun écart notable sur ce shift.</span></div>'}</div>
-  ${drvSection('RTG · conducteurs',d.rtg,OBJ.rtg,'rtg',d)}${drvSection('Cavaliers (SC) · conducteurs',d.sc,OBJ.sc,'sc',d)}
+  ${termSel()!=='TCE'?drvSection('TC3 · conducteurs RTG',d.rtg,OBJ.rtg,'rtg',d):''}${termSel()!=='TC3'?drvSection('TCE · conducteurs CC (cavaliers)',d.sc,OBJ.sc,'sc',d):''}
   <p class="note">Rapport généré après la fin de chaque shift (≈ 07 h 11 pour S3). Les chiffres sont ceux du système d'exploitation du terminal ; un conducteur connecté sur plusieurs engins est regroupé sur une seule ligne.</p>`;
   $('#drvSel').onchange=e=>{drvKey=e.target.value;render();};
   const nb=(id,f)=>{ const x=$(id); x.onchange=e=>{ f(+e.target.value||1); render(); }; };
@@ -761,7 +776,7 @@ const IC={
 };
 function mTop(title,sub,back){
   return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
-    <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div><span class="m-chip">TC3</span></div>
+    <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div><button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TC3':termSel()} ⇄</button></div>
   ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button><button type="button" data-m="drv">Conducteurs</button><button type="button" data-m="ana">Analyse</button><button type="button" data-m="full">Version complète (ordinateur)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
@@ -770,6 +785,7 @@ function mBind(){
     const a=b.dataset.m, v=b.dataset.v;
     if(a==='menu'){ mMenu=!mMenu; render(); return; }
     mMenu=false;
+    if(a==='term'){ setTerm(termSel()==='TC3'?'TCE':'TC3'); return; }
     if(a==='back'){ if(history.state&&history.state.m) history.back(); else { mScr='list'; render(); } return; }
     if(a==='ref'){ lastSig=''; loadSnaps(); toast('Actualisation…'); return; }
     if(a==='drv'||a==='ana'){ tab=a; render(); window.scrollTo(0,0); return; }
@@ -780,18 +796,19 @@ function mBind(){
 }
 const mBar=p=>`<div class="m-bar"><i style="width:${Math.max(0,Math.min(100,p||0))}%"></i></div>`;
 function mList(s){
-  const cv=craneVessel(s), L=s.vessels.slice().sort((a,b)=>((b.rem>0)-(a.rem>0))||String(a.name).localeCompare(b.name));
-  const lh=lastHour(), used=new Set(); L.forEach(v=>asg(v,s,cv).forEach(i=>used.add(i)));
-  const cards=L.map(v=>{ const p=pct(v), done=rm(v)===0&&v.rem===0, T=vTerms(v,s,cv).join(' / ');
-    return `<article class="m-card"><div class="m-ch">${IC.ship}<div><b>${esc(v.name)}</b><span>${esc(T)}${poste(v)?' · '+esc(poste(v)):''} · Escale ${esc(v.visit)}</span></div>${done?'<em class="m-pill">À clôturer</em>':`<strong>${p==null?'—':fmt(p,1)+' %'}</strong>`}</div>
+  const cv=craneVessel(s), srt=(a,b)=>((b.rem>0)-(a.rem>0))||String(a.name).localeCompare(b.name), T=termSel(), L=termVs(s).slice().sort(srt), O=otherVs(s).slice().sort(srt);
+  const lh=lastHour(), used=new Set(); s.vessels.forEach(v=>asg(v,s,cv).forEach(i=>used.add(i)));
+  const card=v=>{ const p=pct(v), done=rm(v)===0&&v.rem===0, TT=vTerms(v,s,cv).join(' / ');
+    return `<article class="m-card"><div class="m-ch">${IC.ship}<div><b>${esc(v.name)}</b><span>${esc(TT)}${poste(v)?' · '+esc(poste(v)):''} · Escale ${esc(v.visit)}</span></div>${done?'<em class="m-pill">À clôturer</em>':`<strong>${p==null?'—':fmt(p,1)+' %'}</strong>`}</div>
       <div class="m-prog">${mBar(done?100:p)}<div><span><b>${fmt(ac(v))}</b> faits</span><span><b>${fmt(rm(v))}</b> restants</span></div></div>
-      <div class="m-btns"><button type="button" data-m="glob" data-v="${esc(v.visit)}">${IC.globe}<span>Vue globale</span></button><button type="button" data-m="rend" data-v="${esc(v.visit)}">${IC.clock}<span>Rendement</span></button><button type="button" data-m="port" data-v="${esc(v.visit)}">${IC.crane}<span>Portiques</span></button></div></article>`; }).join('');
-  const free=Object.entries(TERM).map(([t,l])=>{ const f=l.filter(i=>!used.has(i)); return `<div><b>${t}</b> libres : ${f.length?f.join(', '):'aucun'}</div>`; }).join('');
-  const lv=s.vessels.some(v=>LV.has(v))&&lh?` · mis à jour avec le rapport horaire de ${hTime(lh)}`:'';
-  const tot=s.vessels.reduce((a,v)=>a+(rm(v)||0),0);
-  return mTop('Suivez vos navires à tout instant',`Rapport de shift ${esc(LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}${lv}`)
-   +`<div class="m-body"><div class="m-kpi"><div><b>${s.vessels.filter(v=>v.rem>0).length}</b><span>en cours</span></div><div><b>${fmt(tot)}</b><span>restants</span></div><div><b>${s.vessels.filter(v=>v.rem===0).length}</b><span>à clôturer</span></div></div>
-   <h3 class="m-h">Liste des escales</h3>${cards}<div class="m-free">${free}</div></div>`;
+      <div class="m-btns"><button type="button" data-m="glob" data-v="${esc(v.visit)}">${IC.globe}<span>Vue globale</span></button><button type="button" data-m="rend" data-v="${esc(v.visit)}">${IC.clock}<span>Rendement</span></button><button type="button" data-m="port" data-v="${esc(v.visit)}">${IC.crane}<span>Portiques</span></button></div></article>`; };
+  const tl=T==='ALL'?Object.keys(TERM):[TK[T]], free=tl.map(t=>{ const f=(TERM[t]||[]).filter(i=>!used.has(i)); return `<div><b>${t==='TC3PC'?'TC3':t}</b> · portiques libres : ${f.length?f.join(', '):'aucun'}</div>`; }).join('');
+  const lv=L.some(v=>LV.has(v))&&lh?` · mis à jour avec le rapport horaire de ${hTime(lh)}`:'';
+  const tot=L.reduce((a,v)=>a+(rm(v)||0),0);
+  return mTop('Suivez vos navires à tout instant',`Terminal ${T==='ALL'?'TCE + TC3':T} · rapport de shift ${esc(LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}${lv}`)
+   +`<div class="m-body"><div class="m-kpi"><div><b>${L.filter(v=>v.rem>0).length}</b><span>en cours</span></div><div><b>${fmt(tot)}</b><span>restants</span></div><div><b>${L.filter(v=>v.rem===0).length}</b><span>à clôturer</span></div></div>
+   <h3 class="m-h">Liste des escales · ${T==='ALL'?'TCE + TC3':T}</h3>${L.map(card).join('')||'<p class="m-note">Aucun navire sur ce terminal dans le dernier rapport.</p>'}
+   ${O.length?`<h3 class="m-h">Non rattachés à un terminal (${O.length})</h3>${O.map(card).join('')}`:''}<div class="m-free">${free}</div></div>`;
 }
 const mRow=(ic,l,main,sub)=>`<div class="m-row">${ic}<div class="m-rl"><b>${l}</b>${sub?`<span>${sub}</span>`:''}</div><div class="m-rv">${main}</div></div>`;
 function mGlob(s,v){
@@ -846,17 +863,17 @@ function render(){
   document.querySelectorAll('#tabs [data-tab]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.tab===tab); b.onclick=()=>{tab=b.dataset.tab;render();window.scrollTo(0,0);}; });
   const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
   if(tab==='drv'){ renderDrv(); return; }
-  liveCalc(); document.body.classList.remove('mobpilot'); $('#btnMob').hidden=!(mq.matches&&fullView());
+  liveCalc(); document.body.classList.remove('mobpilot'); { const sg=$('#termSeg'); sg.hidden=!(session&&(tab==='pilot'||tab==='drv')); sg.querySelectorAll('[data-t]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.t===termSel()); b.onclick=()=>setTerm(b.dataset.t); }); } $('#btnMob').hidden=!(mq.matches&&fullView());
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
     app.innerHTML=`<div class="empty"><b>Aucun rapport pour l'instant</b>Les rapports arrivent automatiquement depuis la boîte mail, ou importez un fichier. Le tableau de bord affichera les quais, l'avancement de chaque navire et le rendement des portiques.</div>`; return; }
   if(s&&isMob()&&tab==='pilot'){ renderMobile(s); return; }
   { const lh=lastHour(); $('#sub').textContent=`Rapport de shift du ${LT(s,{dateStyle:'short',timeStyle:'short'})} · ${s.shift}`+(s===lastSnap()&&lh&&s.vessels.some(v=>LV.has(v))?` · mis à jour avec le rapport horaire de ${hTime(lh)}`:''); }
-  const tot=s.vessels.reduce((a,v)=>({rem:a.rem+(rm(v)||0),sh:a.sh+(v.shiftTotal||0),acc:a.acc+(ac(v)||0)}),{rem:0,sh:0,acc:0});
+  const TV=termVs(s), tot=TV.reduce((a,v)=>({rem:a.rem+(rm(v)||0),sh:a.sh+(v.shiftTotal||0),acc:a.acc+(ac(v)||0)}),{rem:0,sh:0,acc:0});
   const al=alertsFor(s), pcol={crit:'p-crit',warn:'p-warn',info:'p-info'}, plab={crit:'Critique',warn:'Alerte',info:'Info'};
   const strip=`<div class="strip">
-    <div><div class="k">Navires en cours</div><div class="v">${s.vessels.filter(v=>v.rem>0).length}</div></div>
-    <div><div class="k">Terminés, à clôturer</div><div class="v">${s.vessels.filter(v=>v.rem===0).length}</div></div>
+    <div><div class="k">Navires en cours</div><div class="v">${TV.filter(v=>v.rem>0).length}</div></div>
+    <div><div class="k">Terminés, à clôturer</div><div class="v">${TV.filter(v=>v.rem===0).length}</div></div>
     <div><div class="k">Mouvements restants</div><div class="v num">${fmt(tot.rem)}</div></div>
     <div><div class="k">Mouvements du shift</div><div class="v num">${fmt(tot.sh)}</div></div>
     <div><div class="k">Alertes</div><div class="v">${al.filter(a=>a[0]!=='info').length}</div></div></div>`;
@@ -865,7 +882,7 @@ function render(){
     app.innerHTML=strip+
       (top.length?`<div class="alerts" style="margin-bottom:6px">${shown.map(a=>`<div class="al"><span class="pill ${pcol[a[0]]}">${a[1]}</span><span>${esc(a[2])}</span></div>`).join('')}${top.length>shown.length?`<div class="note" style="margin:0">+ ${top.length-shown.length} autre(s) alerte(s) : voir la rubrique <a href="#" id="goAna">Analyse</a>.</div>`:''}</div>`:'')+
       quaysHtml(s)+
-      `<h2>Avancement détaillé par navire</h2><div class="cards">${s.vessels.filter(v=>v.rem>0).map(v=>vesselCard(v,s)).join('')||'<div class="empty" style="padding:18px">Aucun navire avec des mouvements restants.</div>'}</div>
+      `<h2>Avancement détaillé par navire</h2><div class="cards">${[...TV,...otherVs(s)].filter(v=>v.rem>0).map(v=>vesselCard(v,s)).join('')||'<div class="empty" style="padding:18px">Aucun navire avec des mouvements restants.</div>'}</div>
       <p class="note">Rubriques « n/d » : non fournies par les rapports actuels (demande en cours auprès de l'IT). Elles s'afficheront automatiquement dès réception.</p>`+
       matrixHtml()+rtgHtml();
     app.querySelectorAll('.poste').forEach(e=>e.onclick=()=>setPoste(e.dataset.visit));
