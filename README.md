@@ -81,3 +81,11 @@ Nouvel onglet **Conducteurs** (réservé aux responsables) alimenté par le rapp
 classement des conducteurs RTG et cavaliers (nom, matricule, engins, connexion, mouvements, déchargement/chargement, IN/OUT, parc, shifting), mouvements par heure connectée, points d'attention (rendement faible, shifting élevé, connectés sans mouvement, RTG absents du rapport horaire), synthèse par engin, export Excel (feuille « Conducteurs »).
 
 Mise en service côté Supabase : exécuter `supabase/driver_shift.sql`, redéployer les fonctions `ingest-report` et `mailbox` (dossiers `supabase/functions/`). Seuils modifiables dans l'onglet (objectif RTG 15/h, cavaliers 10/h, alerte shifting 40 %).
+
+## v5.1 — mise à jour horaire de l'avancement
+
+Chaque rapport horaire reçu met à jour automatiquement, sur l'onglet Pilotage, les mouvements faits, le restant, le % d'avancement et l'heure de fin estimée de chaque navire : base = dernier rapport de shift (officiel) + mouvements des grues du navire dans les rapports horaires reçus depuis. C'est une estimation (indiquée sur la carte) ; au rapport de shift suivant (≈ 07 h, 15 h, 23 h) les chiffres sont recalés sur le rapport officiel. Si les grues d'un navire dépassent le restant connu (réaffectation), la mise à jour est suspendue et signalée. Les fenêtres horaires manquantes sont signalées.
+
+## v6 — version téléphone
+
+Sur un écran de téléphone (largeur ≤ 700 px) l'onglet Pilotage devient une application simplifiée : liste des escales (avancement, faits/restants, boutons Vue globale / Rendement / Portiques), puis écrans détaillés (import, export, transbordement, débarquement/réembarquement, hors gabarit, shifting, panneaux ; rendement des grues par shift ; mouvements par heure de chaque portique). Le menu ☰ donne accès à Actualiser, Conducteurs, Analyse, Version complète et Déconnexion. Le bouton « Vue mobile » de la version complète permet d'y revenir.

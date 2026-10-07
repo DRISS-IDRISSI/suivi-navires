@@ -132,6 +132,50 @@ details.dt{margin-top:12px}details.dt>summary{cursor:pointer;color:var(--fg-2);f
 .mx tr.sub td{font-weight:600;background:var(--surface-2)}.mx td .vv{display:block;white-space:normal;max-width:150px}
 .hint{font-size:12px;color:var(--fg-3)}
 @media (max-width:640px){.pb{width:70px}.pct{font-size:32px}}
+
+/* ---- version telephone ---- */
+body.mobpilot header.top,body.mobpilot #drop{display:none}
+body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
+.m{--nv:#1f3a6e;--bl:#3b82c4;--bg2:#e8eef3;--ln:#1f3a6e;color:#1f3a6e;font-family:var(--f-body)}
+.m button{font-family:inherit}
+.m-top{position:sticky;top:0;z-index:6;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid #d5dde5}
+.m-t{font-size:20px;letter-spacing:.01em;color:var(--nv)}.m-t b{font-weight:800}
+.m-chip{background:var(--bl);color:#fff;font-weight:700;border-radius:10px;padding:8px 16px;font-size:18px}
+.m-ic{background:none;border:0;padding:6px;min-height:0;color:var(--nv)}.m-ic svg{width:34px;height:34px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block}
+.m-menu{background:#fff;border-bottom:1px solid #d5dde5;display:flex;flex-direction:column}
+.m-menu button{background:#fff;border:0;border-top:1px solid #edf1f5;text-align:left;padding:14px 18px;font-size:16px;color:var(--nv);border-radius:0}
+.m-sub{background:var(--bg2);text-align:center;padding:14px 12px;font-size:19px;font-weight:600;color:var(--nv)}
+.m-sub small{display:block;font-size:12px;font-weight:400;color:#5b6f8f;margin-top:4px}
+.m-body{padding:12px 14px;background:#fff}
+.m-kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:6px}
+.m-kpi div{background:var(--bg2);border-radius:12px;padding:8px 6px;text-align:center}.m-kpi b{display:block;font-size:24px;font-family:var(--f-display)}.m-kpi span{font-size:12px;color:#5b6f8f}
+.m-h{font-size:17px;color:#9fb3c8;margin:14px 2px 8px;font-weight:600}
+.m-card{background:var(--nv);border-radius:20px;border:2px solid var(--nv);margin-bottom:14px;overflow:hidden}
+.m-ch{background:#fff;border-radius:0 0 22px 18px;padding:12px 14px;display:flex;align-items:center;gap:10px}
+.m-ch svg{width:28px;height:28px;stroke:var(--nv);fill:none;stroke-width:1.8;flex:none}
+.m-ch>div{flex:1;min-width:0}.m-ch b{display:block;font-size:19px;text-transform:uppercase;line-height:1.1}.m-ch span{display:block;font-size:12.5px;color:#6b7c93;margin-top:2px}
+.m-ch strong{font-size:26px;font-family:var(--f-display);white-space:nowrap}.m-pill{background:#fbefd6;color:#a86a00;border-radius:8px;padding:3px 8px;font-size:12px;font-style:normal;font-weight:600}
+.m-prog{padding:8px 14px 2px;color:#dbe6f3}.m-prog>div{display:flex;justify-content:space-between;font-size:13px;margin:4px 0}.m-prog b{color:#fff}
+.m-bar{height:10px;background:#dde5ee;border-radius:6px;overflow:hidden}.m-bar i{display:block;height:100%;background:var(--bl);border-radius:6px}
+.m-prog .m-bar{background:#38588f}.m-prog .m-bar i{background:#7fc0ff}
+.m-btns{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 10px 12px}
+.m-btns button{background:var(--bl);border:1px solid #9bc3e6;border-radius:10px;color:#fff;padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:58px}
+.m-btns svg{width:28px;height:28px;stroke:#fff;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.m-btns span{font-size:11.5px}
+.m-free{font-size:12px;color:#5b6f8f;margin:4px 4px 10px;line-height:1.5}
+.m-box{border:2px solid var(--nv);border-radius:18px;padding:12px 14px;margin-bottom:12px;background:#fff}
+.m-big{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.m-big strong{font-size:40px;font-family:var(--f-display);line-height:1}.m-big span{background:#e1ebf8;color:#245fa8;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600}
+.m-two{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px;text-align:center}.m-two b{display:block;font-size:19px}.m-two span{font-size:11.5px;color:#6b7c93}
+.m-note{font-size:12px;color:#6b7c93;margin:8px 2px 0}.m-w{color:#a86a00}
+.m-row{border:2px solid var(--nv);border-radius:18px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;background:#fff}
+.m-row svg{width:26px;height:26px;stroke:var(--nv);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m-rl{flex:1;min-width:0}.m-rl b{display:block;font-size:17px}.m-rl span{display:block;font-size:12px;color:#5b6f8f;margin-top:2px}
+.m-rv{font-weight:700;font-size:17px;text-align:right;white-space:nowrap}.m-rv small{font-weight:400;font-size:11px;color:#6b7c93}.m-rv i{font-style:normal;color:#9aa8bb;font-weight:500}
+.m-ch2{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.m-ch2 b{font-size:19px}
+.m-st{font-size:12px;border-radius:6px;padding:3px 8px;background:var(--bg2)}.m-st.ok{background:#e0f3ec;color:#12805c}.m-st.low{background:#fbe3e1;color:#b3261e}.m-st.chk{background:#fbefd6;color:#a86a00}
+.m-t3{width:100%;table-layout:fixed;border-collapse:collapse}.m-t3 th{font-size:11px;text-align:center;color:#6b7c93;padding:2px;white-space:normal}.m-t3 td{text-align:center;padding:8px 2px;border-radius:8px}
+.m-t3 td b{display:block;font-size:18px}.m-t3 td small{font-size:11px;color:#5b6f8f}.m-g{background:#e0f3ec}.m-o{background:#fbefd6}.m-l{background:#e1ebf8}.m-z{color:#9aa8bb;background:#f3f6f9}
+.m-hrs{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}.m-hrs div{background:#f3f6f9;border-radius:8px;text-align:center;padding:6px 0}.m-hrs b{display:block;font-size:14px}.m-hrs span{font-size:9.5px;color:#6b7c93}
+.m-hrs .ok{background:#e0f3ec}.m-hrs .low{background:#fbe3e1}.m-hrs .chk{background:#fbefd6}
 </style></head><body>
 <div class="wrap">
 <header class="top"><div class="top-in">
@@ -140,6 +184,7 @@ details.dt{margin-top:12px}details.dt>summary{cursor:pointer;color:var(--fg-2);f
     <label for="snapSel" class="sub" style="margin:0">Rapport</label>
     <select id="snapSel" aria-label="Choisir un rapport"></select>
     <button type="button" id="btnOut" hidden>Déconnexion</button>
+    <button type="button" id="btnMob" hidden>Vue mobile</button>
     <button class="primary" id="btnImport" type="button">Importer un rapport</button>
     <button type="button" id="btnXlsx">Exporter Excel</button>
     <button type="button" id="btnPdf">Exporter PDF</button>
@@ -694,6 +739,106 @@ function renderDrv(){
   nb('#oRtg',v=>OBJ.rtg=v); nb('#oSc',v=>OBJ.sc=v); nb('#oSh',v=>SHF=v);
 }
 
+/* ---------- version telephone (vue simplifiee : liste des escales -> vue globale / rendement / portiques) ---------- */
+let mScr='list', mVisit=null, mMenu=false;
+const mq=window.matchMedia('(max-width:700px)');
+const fullView=()=>{ try{ return sessionStorage.getItem('fullView')==='1'; }catch(e){ return false; } };
+const isMob=()=>mq.matches&&!fullView();
+(mq.addEventListener?mq.addEventListener.bind(mq,'change'):mq.addListener.bind(mq))(()=>{ if(session) render(); });
+window.addEventListener('popstate',()=>{ if(mScr!=='list'){ mScr='list'; mMenu=false; if(session) render(); } });
+const IC={
+  globe:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg>',
+  clock:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+  crane:'<svg viewBox="0 0 24 24"><path d="M5 21V6l7-3 7 3M5 8h14M12 3v5M5 21h14M16 8v6M14.5 14h3v3h-3z"/></svg>',
+  ship:'<svg viewBox="0 0 24 24"><path d="M3 15l2 5h14l2-5-9-3zM8 12V7h8v5M12 7V4"/></svg>',
+  imp:'<svg viewBox="0 0 24 24"><path d="M4 12h12M12 7l5 5-5 5M20 4v16"/></svg>',
+  exp:'<svg viewBox="0 0 24 24"><path d="M20 12H8M12 7l-5 5 5 5M4 4v16"/></svg>',
+  ts:'<svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>',
+  dl:'<svg viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>',
+  warn:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg>',
+  sh:'<svg viewBox="0 0 24 24"><path d="M5 9a7 7 0 0112-3l2 2M19 15a7 7 0 01-12 3l-2-2M19 4v4h-4M5 20v-4h4"/></svg>',
+  pan:'<svg viewBox="0 0 24 24"><path d="M5 5h14v4H5zM8 9v11M16 9v11M5 14h14"/></svg>',
+};
+function mTop(title,sub,back){
+  return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
+    <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div><span class="m-chip">TC3</span></div>
+  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button><button type="button" data-m="drv">Conducteurs</button><button type="button" data-m="ana">Analyse</button><button type="button" data-m="full">Version complète (ordinateur)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
+  <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
+}
+function mBind(){
+  document.querySelectorAll('#app [data-m]').forEach(b=>b.onclick=()=>{
+    const a=b.dataset.m, v=b.dataset.v;
+    if(a==='menu'){ mMenu=!mMenu; render(); return; }
+    mMenu=false;
+    if(a==='back'){ if(history.state&&history.state.m) history.back(); else { mScr='list'; render(); } return; }
+    if(a==='ref'){ lastSig=''; loadSnaps(); toast('Actualisation…'); return; }
+    if(a==='drv'||a==='ana'){ tab=a; render(); window.scrollTo(0,0); return; }
+    if(a==='full'){ try{ sessionStorage.setItem('fullView','1'); }catch(e){} render(); return; }
+    if(a==='out'){ sb.auth.signOut(); return; }
+    if(a==='glob'||a==='rend'||a==='port'){ mScr=a; mVisit=v; try{ history.pushState({m:1},''); }catch(e){} render(); window.scrollTo(0,0); }
+  });
+}
+const mBar=p=>`<div class="m-bar"><i style="width:${Math.max(0,Math.min(100,p||0))}%"></i></div>`;
+function mList(s){
+  const cv=craneVessel(s), L=s.vessels.slice().sort((a,b)=>((b.rem>0)-(a.rem>0))||String(a.name).localeCompare(b.name));
+  const lh=lastHour(), used=new Set(); L.forEach(v=>asg(v,s,cv).forEach(i=>used.add(i)));
+  const cards=L.map(v=>{ const p=pct(v), done=rm(v)===0&&v.rem===0, T=vTerms(v,s,cv).join(' / ');
+    return `<article class="m-card"><div class="m-ch">${IC.ship}<div><b>${esc(v.name)}</b><span>${esc(T)}${poste(v)?' · '+esc(poste(v)):''} · Escale ${esc(v.visit)}</span></div>${done?'<em class="m-pill">À clôturer</em>':`<strong>${p==null?'—':fmt(p,1)+' %'}</strong>`}</div>
+      <div class="m-prog">${mBar(done?100:p)}<div><span><b>${fmt(ac(v))}</b> faits</span><span><b>${fmt(rm(v))}</b> restants</span></div></div>
+      <div class="m-btns"><button type="button" data-m="glob" data-v="${esc(v.visit)}">${IC.globe}<span>Vue globale</span></button><button type="button" data-m="rend" data-v="${esc(v.visit)}">${IC.clock}<span>Rendement</span></button><button type="button" data-m="port" data-v="${esc(v.visit)}">${IC.crane}<span>Portiques</span></button></div></article>`; }).join('');
+  const free=Object.entries(TERM).map(([t,l])=>{ const f=l.filter(i=>!used.has(i)); return `<div><b>${t}</b> libres : ${f.length?f.join(', '):'aucun'}</div>`; }).join('');
+  const lv=s.vessels.some(v=>LV.has(v))&&lh?` · mis à jour avec le rapport horaire de ${hTime(lh)}`:'';
+  const tot=s.vessels.reduce((a,v)=>a+(rm(v)||0),0);
+  return mTop('Suivez vos navires à tout instant',`Rapport de shift ${esc(LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}${lv}`)
+   +`<div class="m-body"><div class="m-kpi"><div><b>${s.vessels.filter(v=>v.rem>0).length}</b><span>en cours</span></div><div><b>${fmt(tot)}</b><span>restants</span></div><div><b>${s.vessels.filter(v=>v.rem===0).length}</b><span>à clôturer</span></div></div>
+   <h3 class="m-h">Liste des escales</h3>${cards}<div class="m-free">${free}</div></div>`;
+}
+const mRow=(ic,l,main,sub)=>`<div class="m-row">${ic}<div class="m-rl"><b>${l}</b>${sub?`<span>${sub}</span>`:''}</div><div class="m-rv">${main}</div></div>`;
+function mGlob(s,v){
+  const p=pct(v), e=eta(v,s), L=LV.get(v), n=x=>x==null?'<i>n/d</i>':fmt(x), both=(a,b)=>`Réalisé ${a==null?'n/d':fmt(a)} · Restant ${b==null?'n/d':fmt(b)}`;
+  const impTxt=v.impF!=null||v.impE!=null?`Plein ${n(v.impF)} / ${n(v.remImpF)} · Vide ${n(v.impE)} / ${n(v.remImpE)}`:both(v.imp,v.remImp);
+  const sh=v.shifting!=null?v.shifting:v.restow;
+  return mTop(`${esc(v.name)}`,`Escale ${esc(v.visit)} · VUE GLOBALE`,true)
+  +`<div class="m-body"><section class="m-box"><div class="m-big"><strong>${p==null?'—':fmt(p,1)+' %'}</strong><span>${esc(v.phase)}</span></div>${mBar(p)}
+    <div class="m-two"><div><b>${fmt(ac(v))}</b><span>faits</span></div><div><b>${fmt(rm(v))}</b><span>restants</span></div><div><b>${v.rem===0?'Terminé':esc(e.txt)}</b><span>${e.clock?'fin vers '+e.clock:'fin estimée'}</span></div></div>
+    ${L&&!L.unreliable?`<p class="m-note">Rapport de shift + ${fmt(L.mv)} mouvement(s) des grues jusqu'à ${hTime(L.upto)}${L.gaps?` · ${L.gaps} heure(s) manquante(s)`:''} (estimation)</p>`:L?`<p class="m-note m-w">Mise à jour horaire suspendue : réaffectation probable des grues.</p>`:''}</section>
+  ${mRow(IC.imp,'Import',n(v.remImp!=null||v.remImpF!=null?(v.remImp!=null?v.remImp:(v.remImpF||0)+(v.remImpE||0)):null)+'<small> restant</small>',impTxt)}
+  ${mRow(IC.exp,'Export plein',n(v.remF)+'<small> restant</small>',both(v.expF,v.remF))}
+  ${mRow(IC.exp,'Export vide',n(v.remE)+'<small> restant</small>',both(v.expE,v.remE))}
+  ${mRow(IC.ts,'Transbordement','IN '+n(v.tsIn)+' · OUT '+n(v.tsOut),'')}
+  ${mRow(IC.dl,'Débarq / Réembarq',n(v.landed)+' / '+n(v.reloaded),'')}
+  ${mRow(IC.warn,'Hors gabarit',n(v.oog),'')}${mRow(IC.sh,'Shifting / restow',n(sh),'')}${mRow(IC.pan,'Panneaux',n(v.hatch),'')}
+  <p class="m-note">« n/d » : non fourni par les rapports actuels (demandé à l'IT). Réalisé = shift en cours du rapport.</p></div>`;
+}
+function mRend(s,v){
+  const ids=asg(v,s,craneVessel(s)), day=dayOf(s), live=liveShift();
+  const by={}; snaps.forEach(x=>{ if(dayOf(x)===day){ const c=shiftCode(x); if(!by[c]||x.ts>by[c].ts) by[c]=x; } });
+  const cell=(id,c)=>{ const sn=by[c]; if(sn){ const e=craneStats(sn).get(id); if(!e||!e.moves) return `<td class="m-z">0</td>`; const g=e.hours?e.moves/e.hours:null; return `<td class="${g!=null&&g>=GT?'m-g':'m-o'}"><b>${fmt(e.moves)}</b><small>${g==null?'':fmt(g,1)+'/h'}</small></td>`; }
+    if(live&&live.code===c){ const m=live.map.get(id)||0; return `<td class="m-l"><b>${fmt(m)}</b><small>en cours</small></td>`; } return `<td class="m-z">—</td>`; };
+  const lh=lastHour();
+  return mTop(`Rendement · ${esc(v.name)}`,`Journée du ${day?dayLab(day):'—'} · objectif ${GT} mvts/h`,true)
+   +`<div class="m-body">${ids.length?ids.map(id=>{ const c=lh&&lh.cranes.find(x=>x.id===id);
+     return `<section class="m-box"><div class="m-ch2"><b>${esc(id)}</b>${c?`<span class="m-st ${stCls(c.status)}">${fmt(c.moves)} mvts dernière heure</span>`:''}</div>
+     <table class="m-t3"><thead><tr><th>S1 07–15</th><th>S2 15–23</th><th>S3 23–07</th></tr></thead><tbody><tr>${['S1','S2','S3'].map(k=>cell(id,k)).join('')}</tr></tbody></table></section>`; }).join('')
+     :'<p class="m-note">Aucun portique affecté à ce navire dans le dernier rapport.</p>'}
+   <p class="m-note">Mouvements du shift et mouvements par heure de grue. Vert = objectif atteint, orange = en dessous.</p></div>`;
+}
+function mPort(s,v){
+  const ids=asg(v,s,craneVessel(s)), H=hours.slice(-8), lh=lastHour();
+  return mTop(`Portiques · ${esc(v.name)}`,`${lh?'Dernière heure : '+esc(lh.from)+' – '+esc(lh.to):''}`,true)
+   +`<div class="m-body">${ids.length?ids.map(id=>{ const c=lh&&lh.cranes.find(x=>x.id===id);
+     return `<section class="m-box"><div class="m-ch2"><b>${esc(id)}</b>${c?`<span class="pill ${stPill(c.status)}">${stLab(c.status)}</span>`:'<span class="vv">pas de rapport horaire</span>'}</div>
+     <div class="m-hrs">${H.map(h=>{ const x=h.cranes.find(y=>y.id===id); return `<div class="${x?stCls(x.status):''}"><b>${x?fmt(x.moves):'·'}</b><span>${esc(h.to)}</span></div>`; }).join('')}</div></section>`; }).join('')
+     :'<p class="m-note">Aucun portique affecté à ce navire dans le dernier rapport.</p>'}
+   <p class="m-note">Mouvements par heure, les 8 dernières fenêtres horaires reçues (heure de fin sous chaque case).</p></div>`;
+}
+function renderMobile(s){
+  document.body.classList.add('mobpilot');
+  const v=mVisit&&s.vessels.find(x=>x.visit===mVisit); if(mScr!=='list'&&!v) mScr='list';
+  $('#app').innerHTML=`<div class="m">${mScr==='glob'?mGlob(s,v):mScr==='rend'?mRend(s,v):mScr==='port'?mPort(s,v):mList(s)}</div>`;
+  mBind();
+}
+
 /* ---------- render ---------- */
 function render(){
   const on=!!session; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel','#tabs'].forEach(q=>$(q).hidden=!on); $('#drop').hidden=!on||(tab!=='ana'&&tab!=='drv');
@@ -701,10 +846,11 @@ function render(){
   document.querySelectorAll('#tabs [data-tab]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.tab===tab); b.onclick=()=>{tab=b.dataset.tab;render();window.scrollTo(0,0);}; });
   const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
   if(tab==='drv'){ renderDrv(); return; }
-  liveCalc();
+  liveCalc(); document.body.classList.remove('mobpilot'); $('#btnMob').hidden=!(mq.matches&&fullView());
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
     app.innerHTML=`<div class="empty"><b>Aucun rapport pour l'instant</b>Les rapports arrivent automatiquement depuis la boîte mail, ou importez un fichier. Le tableau de bord affichera les quais, l'avancement de chaque navire et le rendement des portiques.</div>`; return; }
+  if(s&&isMob()&&tab==='pilot'){ renderMobile(s); return; }
   { const lh=lastHour(); $('#sub').textContent=`Rapport de shift du ${LT(s,{dateStyle:'short',timeStyle:'short'})} · ${s.shift}`+(s===lastSnap()&&lh&&s.vessels.some(v=>LV.has(v))?` · mis à jour avec le rapport horaire de ${hTime(lh)}`:''); }
   const tot=s.vessels.reduce((a,v)=>({rem:a.rem+(rm(v)||0),sh:a.sh+(v.shiftTotal||0),acc:a.acc+(ac(v)||0)}),{rem:0,sh:0,acc:0});
   const al=alertsFor(s), pcol={crit:'p-crit',warn:'p-warn',info:'p-info'}, plab={crit:'Critique',warn:'Alerte',info:'Info'};
@@ -868,6 +1014,7 @@ $('#btnPdf').onclick=()=>{ const s=cur(); if(!s) return; try{ saveFile('Suivi_es
 
 /* ---------- boot ---------- */
 $('#btnOut').onclick=()=>sb.auth.signOut();
+$('#btnMob').onclick=()=>{ try{ sessionStorage.removeItem('fullView'); }catch(e){} render(); };
 function start(){ if(session) loadSnaps(); else render(); }
 sb.auth.getSession().then(({data})=>{ session=data.session; start(); });
 sb.auth.onAuthStateChange((_e,s)=>{ session=s; lastSig=''; start(); });
