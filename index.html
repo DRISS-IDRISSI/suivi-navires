@@ -428,7 +428,7 @@ function parseSituation(wb){
   for(let i=hr+2;i<R.length;i++){ const r=R[i], nm=normN(r[cName]); if(!nm) continue;
     const st0=normN(r[cSt]), st=/APPAREIL/.test(st0)?'Appareillé':/TERMIN|PARTI/.test(st0)?'Terminé':/ACCOST/.test(st0)?'Accosté':'Prévision';
     const prog=blk(r,c0), rest=blk(r,c1), sum=o=>o.impP+o.impV+o.expP+o.expV+o.deb;
-    vessels.push({name:nm,status:st,armateur:String(r[cArm]||'').trim(),consignataire:String(r[cCon]||'').trim(),len:Math.round(n(r[cLen])),
+    vessels.push({name:nm,status:st,statusRaw:String(r[cSt]||'').trim(),armateur:String(r[cArm]||'').trim(),consignataire:String(r[cCon]||'').trim(),len:Math.round(n(r[cLen])),
       eta:dt(r[cEta]),berth:cAcc>=0?dt(r[cAcc]):null,dep:cDep>=0?dt(r[cDep]):null,visit:String(r[cVis]||'').trim().replace(/\.0+$/,''),voyage:String(r[cVoy]||'').trim(),
       poste:pos(r[cPo]),prog,total:cTot>=0&&n(r[cTot])?n(r[cTot]):sum(prog),rest,restTotal:cRst>=0&&r[cRst]!==''?n(r[cRst]):sum(rest)}); }
   if(!vessels.length) throw new Error('Aucun navire dans la situation.');
@@ -1063,7 +1063,7 @@ function renderPrev(){
       <div class="d-pg"><span>Import : <b>${fmt(e.rest.impP)}</b> restants sur ${fmt(e.prog.impP)}</span><span>Export plein : <b>${fmt(e.rest.expP)}</b> sur ${fmt(e.prog.expP)}</span><span>Export vide : <b>${fmt(e.rest.expV)}</b> sur ${fmt(e.prog.expV)}</span></div>
       ${canImp()?`<button type="button" class="m-dep" data-dep="${esc(e.visit)}">Marquer appareillé</button>`:''}<p class="m-note" style="margin:4px 4px 2px">${esc(e.armateur)}${e.consignataire?' · '+esc(e.consignataire):''}${e.len?' · '+e.len+' m':''}${a?` · Application maintenant : <b>${fmt(rm(a))}</b> restants`:''}</p></article>`; };
   const byDay=new Map(); prv.forEach(e=>{ const k=e.eta?dayK(e.eta):'—'; if(!byDay.has(k)) byDay.set(k,[]); byDay.get(k).push(e); });
-  const pcard=e=>`<div class="d-pv"><div><b>${esc(e.name)}</b><span>${esc(e.armateur)}${e.consignataire?' · '+esc(e.consignataire):''}${e.len?' · '+e.len+' m':''}</span></div><div><strong>${e.eta?hhmm(e.eta):'—'}</strong><span>${e.total?fmt(e.total)+' mvts prévus':'programme à venir'}</span></div></div>`;
+  const pcard=e=>`<div class="d-pv"><div><b>${esc(e.name)}${e.statusRaw&&!/^pr[ée]vision$/i.test(e.statusRaw)?` <em class="d-po">${esc(e.statusRaw)}</em>`:''}</b><span>${esc(e.armateur)}${e.consignataire?' · '+esc(e.consignataire):''}${e.len?' · '+e.len+' m':''}</span></div><div><strong>${e.eta?hhmm(e.eta):'—'}</strong><span>${e.total?fmt(e.total)+' mvts prévus':'programme à venir'}</span></div></div>`;
   let tdy=''; try{ tdy=new Date().toLocaleDateString('en-CA',{timeZone:TZ}); }catch(e){}
   const stale=tdy&&sit.date<tdy?`<div class="d-warn">Cette situation date du ${esc(dayLab(sit.date))} : importez celle du jour (reçue à 8 h) pour mettre à jour les navires à quai et les départs.</div>`:'';
   app.innerHTML=mTop('Prévisions & situation',`Situation du ${esc(dayLab(sit.date))} à 08 h`,false,true)+`<div class="m-body">${stale}${imp}

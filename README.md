@@ -185,3 +185,7 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 
 ## v7.18 — Statut « Navire terminé »
 - Le statut « Navire terminé » de la situation est reconnu (comme « Appareillé ») : le navire disparaît de Pilotage et de « À quai », et apparaît dans « Terminés / appareillés ».
+
+## v7.19 — Situation par e-mail (automatique) + statut exact affiché
+- Fonctions Edge `ingest-report` v5 et `mailbox` v5 : un fichier dont le nom commence par « Situation » reçu sur la boîte est lu automatiquement et rangé dans la table `situation`.
+- Les statuts inconnus du fichier (ex. « En rade ») sont affichés tels quels sur la ligne du navire dans « Arrivées prévues ».
