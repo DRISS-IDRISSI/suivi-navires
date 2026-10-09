@@ -170,3 +170,10 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.15 — Correction manuelle navire/poste d'un portique (écran Direction)
 - Les rapports horaires ne contiennent pas le nom du navire : le navire d'un portique vient du dernier rapport de fin de shift. Si un portique change de navire en cours de shift, toucher sa carte (Direction) permet de saisir le navire et le poste (ex. MIMMI SCHULTE / P83).
 - La correction est enregistrée dans la table escale_meta (clé CRANE:<portique>), visible de tous, et s'efface d'elle-même au prochain rapport de fin de shift. Champ vide = retour à l'information du rapport. Réservé aux Administrateurs et Responsables.
+
+## v7.16 — Situation quotidienne des navires (fichier de 8 h)
+- Import du fichier « Situation navires porte-conteneurs et prévisions » (bouton d'import en vue complète, ou ☰ → Prévisions → « Importer la situation »). Lecture par titres de colonnes. Table Supabase `situation` (SUPABASE_table_situation.sql) ; à défaut, gardée sur l'appareil.
+- Clé de rapprochement : N° VISITE. Le poste vient du fichier (une saisie manuelle reste prioritaire). P70–P79 = TCE, P80–P89 = TC3.
+- Nouvel écran ☰ → **Prévisions** : navires à quai (prévu, restant à 8 h, avancement), arrivées prévues par jour, appareillés.
+- Pilotage : les navires « Appareillé » disparaissent de la liste ; les navires accostés absents du rapport de shift apparaissent avec l'avancement de la situation.
+- Correction manuelle d'un portique (Direction) : le poste est proposé d'après la situation.

@@ -151,6 +151,10 @@ body.dirmode #snapSel,body.dirmode label[for=snapSel],body.dirmode #btnImport,bo
 .d-hr b{font-size:9.5px;font-weight:600;line-height:1.2}.d-hr u{text-decoration:none;font-size:8.5px;color:#7a8aa0}
 .d-po{font-style:normal;font-weight:700;font-size:11px;background:#1f3a6e;color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px;vertical-align:1px}
 .d-ed{font-style:normal;font-size:11px;color:#3b82c4;margin-left:6px}.d-h[data-cr]{cursor:pointer}
+.m-card .d-pg,.m-card .d-pg b,.m-card .m-note{color:#d6e4f7}
+.m-up{display:block;text-align:center;background:#3b82c4;color:#fff;border-radius:12px;padding:12px;font-weight:600;cursor:pointer}
+.d-pg{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:#5b6f8f;padding:6px 6px 0}.d-day{font-weight:700;color:#1f3a6e;margin:10px 4px 4px;text-transform:capitalize}
+.d-pv{display:flex;justify-content:space-between;gap:10px;background:#e8eef3;border-radius:12px;padding:9px 12px;margin-bottom:6px}.d-pv b{display:block;color:#1f3a6e}.d-pv span{font-size:12px;color:#5b6f8f}.d-pv div:last-child{text-align:right}.d-pv strong{color:#1f3a6e;font-size:17px;display:block}
 .d-tot{background:var(--bg2);border-radius:14px;padding:8px 10px;margin:2px 0 10px}.d-tot .m-two{margin-top:2px}
 .d-warn{background:#fbefd6;color:#a86a00;border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:13.5px}
 @media(min-width:700px){body.mobpilot{background:#dfe7ee}body.mobpilot .wrap{background:#fff;min-height:100vh;box-shadow:0 0 0 1px #cfd9e3,0 8px 30px rgba(31,58,110,.12)}}
@@ -364,7 +368,10 @@ async function loadSnaps(){
   const mr=await sb.from('escale_meta').select('visit,poste,updated_at'); let mt={}, cm={};
   if(!mr.error) mr.data.forEach(r=>{ if(!r.poste) return; if(/^CRANE:/.test(r.visit)){ const q=r.poste.split('|'); cm[r.visit.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:Date.parse(r.updated_at)||0}; } else mt[r.visit]=r.poste; }); else { try{ mt=JSON.parse(localStorage.getItem('postes')||'{}'); cm=JSON.parse(localStorage.getItem('cman')||'{}'); }catch(e){} }
   meta=mt; cman=cm;
-  const sig=JSON.stringify(meta)+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
+  { const sr=await sb.from('situation').select('data').order('ts',{ascending:false}).limit(1); let sx=null;
+    if(!sr.error&&sr.data&&sr.data.length) sx=sr.data[0].data; else { try{ sx=JSON.parse(localStorage.getItem('situation')||'null'); }catch(e){} }
+    sit=sx; }
+  const sig=JSON.stringify(meta)+'S'+(sit?sit.id:'')+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
   if(sig===lastSig) return; lastSig=sig;
   hours=hd; rtgs=rd; drivers=dd; if(!drvKey||!dd.some(x=>x.id===drvKey)) drvKey=dd.length?dd[dd.length-1].id:null; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
 }
@@ -396,11 +403,53 @@ function showLogin(){
     <button class="primary" type="submit">Se connecter</button><div class="note" id="lerr"></div></form>`;
   $('#lf').onsubmit=async e=>{ e.preventDefault(); const idt=$('#em').value.trim().toLowerCase(); const {error}=await sb.auth.signInWithPassword({email:idt.includes('@')?idt:idt+'@'+IDOM,password:$('#pw').value}); if(error) $('#lerr').textContent='Identifiant ou mot de passe incorrect.'; };
 }
+
+/* ---------- situation quotidienne des navires (fichier recu chaque jour a 8 h) ---------- */
+const p2=x=>String(x).padStart(2,'0');
+const normN=x=>String(x==null?'':x).replace(/ /g,' ').replace(/\s+/g,' ').trim().toUpperCase();
+function isSitWb(wb){ return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}).slice(0,12).some(l=>l.some(x=>/SITUATION\s+NAVIRES/i.test(String(x)))); }
+function parseSituation(wb){
+  const R=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''});
+  let dm=null; R.slice(0,12).forEach(l=>l.forEach(x=>{ const m=String(x).match(/SITUATION\s+DU\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i); if(m) dm=m; }));
+  if(!dm) throw new Error('Date de la situation introuvable (ligne « SITUATION DU jj/mm/aaaa »).');
+  const hr=R.findIndex(l=>l.some(x=>/^navires$/i.test(String(x).trim()))&&l.some(x=>/VISITE/i.test(String(x))));
+  if(hr<0) throw new Error("En-tête du tableau introuvable (colonnes « Navires » et « N° VISITE »).");
+  const H=R[hr].map(x=>String(x).replace(/\s+/g,' ').trim()), H2=(R[hr+1]||[]).map(x=>String(x).replace(/\s+/g,' ').trim());
+  const col=re=>H.findIndex(x=>re.test(x)), cName=col(/^navires$/i), cSt=H.findIndex(x=>/^pr[ée]vision$/i.test(x)), cVis=col(/VISITE/i), cPo=col(/^poste/i);
+  const c0=col(/programme pr[ée]vu/i), c1=col(/^reste [àa] manipuler/i), cTot=col(/total tcs/i), cRst=col(/total reste/i);
+  if(cName<0||cVis<0||c0<0||c1<0) throw new Error('Colonnes attendues absentes : Navires, N° VISITE, Programme prévu, Reste à manipuler.');
+  const cArm=col(/armateur/i), cCon=col(/consignataire/i), cLen=col(/^long/i), cEta=col(/arriv[ée]e/i), cAcc=col(/accostage/i), cDep=col(/appareillage/i), cVoy=col(/VOYAGE/i);
+  const n=x=>{ const v=typeof x==='number'?x:parseFloat(String(x).replace(/\s/g,'').replace(',','.')); return isFinite(v)?v:0; };
+  const dt=x=>{ if(typeof x!=='number'||x<30000) return null; const d=XLSX.SSF.parse_date_code(x); return d?casaToUtc(d.y,d.m-1,d.d,d.H,d.M):null; };
+  const pos=x=>{ const t=String(x).trim(); return !t?'':/^\d+(\.0+)?$/.test(t)?'P'+parseInt(t,10):t; };
+  const blk=(r,c)=>({impP:n(r[c]),impV:n(r[c+1]),expP:n(r[c+2]),expV:n(r[c+3]),deb:n(r[c+4])});
+  const vessels=[];
+  for(let i=hr+2;i<R.length;i++){ const r=R[i], nm=normN(r[cName]); if(!nm) continue;
+    const st0=normN(r[cSt]), st=/APPAREIL/.test(st0)?'Appareillé':/ACCOST/.test(st0)?'Accosté':'Prévision';
+    const prog=blk(r,c0), rest=blk(r,c1), sum=o=>o.impP+o.impV+o.expP+o.expV+o.deb;
+    vessels.push({name:nm,status:st,armateur:String(r[cArm]||'').trim(),consignataire:String(r[cCon]||'').trim(),len:Math.round(n(r[cLen])),
+      eta:dt(r[cEta]),berth:cAcc>=0?dt(r[cAcc]):null,dep:cDep>=0?dt(r[cDep]):null,visit:String(r[cVis]||'').trim().replace(/\.0+$/,''),voyage:String(r[cVoy]||'').trim(),
+      poste:pos(r[cPo]),prog,total:cTot>=0&&n(r[cTot])?n(r[cTot]):sum(prog),rest,restTotal:cRst>=0&&r[cRst]!==''?n(r[cRst]):sum(rest)}); }
+  if(!vessels.length) throw new Error('Aucun navire dans la situation.');
+  const y=+dm[3], mo=+dm[2]-1, d=+dm[1];
+  return {id:`${y}${p2(mo+1)}${p2(d)}`,ts:casaToUtc(y,mo,d,8,0),date:`${y}-${p2(mo+1)}-${p2(d)}`,vessels};
+}
+let sit=null;
+const sitBy=v=>{ if(!sit||!v) return null; return sit.vessels.find(e=>e.visit&&e.visit===String(v))||null; };
+const sitByName=nm=>{ if(!sit) return null; const k=normN(nm); const L=sit.vessels.filter(e=>normN(e.name)===k); return L.find(e=>e.status!=='Appareillé')||L[0]||null; };
+const posteTerm=po=>{ const m=String(po||'').match(/(\d+)/); if(!m) return /TCE/i.test(po||'')?'TCE':null; const k=+m[1]; return k>=80?'TC3':k>=70?'TCE':null; };   /* P70-P79 = TCE, P80-P89 = TC3 */
+const gone=v=>{ const e=sitBy(v.visit); return !!e&&e.status==='Appareillé'; };
+async function saveSituation(x){
+  const {error}=await sb.from('situation').upsert({id:x.id,ts:new Date(x.ts).toISOString(),data:x});
+  if(error){ try{ localStorage.setItem('situation',JSON.stringify(x)); }catch(e){} toast('Table situation absente : situation gardée sur cet appareil seulement (voir SUPABASE_table_situation.sql).'); }
+  lastSig=''; await loadSnaps(); return true;
+}
 /* ---------- import ---------- */
 async function importFiles(files){
   let ok=0; for(const f of files){
     try{ const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
-      if(isDriverWb(wb)){ if(await saveDrivers(parseDrivers(wb))) ok++; }
+      if(isSitWb(wb)){ if(await saveSituation(parseSituation(wb))) ok++; }
+      else if(isDriverWb(wb)){ if(await saveDrivers(parseDrivers(wb))) ok++; }
       else if(isRtgWb(wb)){ if(await saveRtg(parseRtg(wb))) ok++; }
       else if(isHourlyWb(wb)){ if(await saveHourly(parseHourly(wb))) ok++; }
       else { const s=parseWorkbook(wb); sel=s.id; await saveSnap(s); ok++; } }
@@ -544,14 +593,14 @@ const asg=(v,s,cv)=>{ cv=cv||craneVessel(s); return v.cranes.filter(c=>cv.get(c.
 const vTerms=(v,s,cv)=>{ const a=asg(v,s,cv), pool=a.length?v.cranes.filter(c=>a.includes(c.id)):v.cranes.filter(c=>(c.moves||0)>0), L=pool.length?pool:v.cranes, w={};
   L.forEach(c=>{ const t=termOf(c.id); if(t==='Autre') return; w[t]=(w[t]||0)+(c.moves||0)+0.001; });
   const k=Object.keys(w).sort((x,y)=>w[y]-w[x]); return [k[0]||'TCE']; };
-const poste=v=>meta[v.visit]||'';
+const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 /* affectation manuelle d'un portique (navire + poste), valable jusqu'au prochain rapport de fin de shift qui fait foi */
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(); if(sn&&m.ts<sn.ts) return null; return m; };
 async function setCrane(id){
   const m=manFor(id), cur=m?m.vessel:'', v=prompt("Navire actuellement servi par "+id+" (ex. : MIMMI SCHULTE).\nLaisser vide pour revenir à l'information du rapport.",cur);
   if(v===null) return; const nm=v.trim().toUpperCase(); let po='';
-  if(nm){ const r=prompt("Poste à quai de ce navire (ex. : P83)",m?m.poste:''); if(r===null) return; po=r.trim(); }
+  if(nm){ const se=sitByName(nm); const r=prompt("Poste à quai de ce navire (ex. : P83)",m&&m.vessel===nm?m.poste:(se&&se.poste)||''); if(r===null) return; po=r.trim(); }
   const key='CRANE:'+id, now=new Date().toISOString();
   const {error}=await sb.from('escale_meta').upsert({visit:key,poste:nm?nm+'|'+po:null,updated_at:now});
   if(error){ try{ const c=JSON.parse(localStorage.getItem('cman')||'{}'); if(nm) c[id]={vessel:nm,poste:po,ts:Date.now()}; else delete c[id]; localStorage.setItem('cman',JSON.stringify(c)); }catch(e){} toast('Enregistré sur cet appareil seulement.'); }
@@ -838,7 +887,7 @@ const IC={
 function mTop(title,sub,back,noChip){
   return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
     <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div>${noChip?'<span style="width:44px"></span>':`<button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TC3':termSel()}${myTerms().length>1?' ⇄':''}</button>`}</div>
-  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab==='dir'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':'<button type="button" data-m="dir">Direction</button>'}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
+  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab!=='pilot'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':''}${tab!=='dir'?'<button type="button" data-m="dir">Direction</button>':''}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="prev">Prévisions (situation 8 h)</button><button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
 async function hardReload(){ toast('Rechargement…'); try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){} location.reload(); }
@@ -853,7 +902,7 @@ function mBind(){
     if(a==='ref'){ lastSig=''; loadSnaps(); toast('Actualisation…'); return; }
     if(a==='pwd'){ pwdModal(); return; }
     if(a==='reset'){ hardReload(); return; }
-    if(a==='drv'||a==='ana'||a==='acc'||a==='dir'){ tab=a; if(a==='dir'){ try{ history.replaceState(null,'','#direction'); }catch(e){} } render(); window.scrollTo(0,0); return; }
+    if(a==='drv'||a==='ana'||a==='acc'||a==='dir'||a==='prev'){ tab=a; if(a==='dir'){ try{ history.replaceState(null,'','#direction'); }catch(e){} } render(); window.scrollTo(0,0); return; }
     if(a==='pilot'){ tab='pilot'; mScr='list'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} render(); window.scrollTo(0,0); return; }
     if(a==='full'){ try{ localStorage.setItem('fullView','1'); }catch(e){} if(tab==='dir'){ tab='pilot'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} } render(); return; }
     if(a==='out'){ sb.auth.signOut(); return; }
@@ -862,7 +911,7 @@ function mBind(){
 }
 const mBar=p=>`<div class="m-bar"><i style="width:${Math.max(0,Math.min(100,p||0))}%"></i></div>`;
 function mList(s){
-  const cv=craneVessel(s), srt=(a,b)=>((b.rem>0)-(a.rem>0))||String(a.name).localeCompare(b.name), T=termSel(), L=termVs(s).slice().sort(srt), O=otherVs(s).slice().sort(srt);
+  const cv=craneVessel(s), srt=(a,b)=>((b.rem>0)-(a.rem>0))||String(a.name).localeCompare(b.name), T=termSel(), L=termVs(s).filter(v=>!gone(v)).sort(srt), O=otherVs(s).filter(v=>!gone(v)).sort(srt);
   const lh=lastHour(), used=new Set(); s.vessels.forEach(v=>asg(v,s,cv).forEach(i=>used.add(i)));
   const card=v=>{ const p=pct(v), done=rm(v)===0&&v.rem===0, TT=vTerms(v,s,cv).join(' / ');
     return `<article class="m-card"><div class="m-ch">${IC.ship}<div><b>${esc(v.name)}</b><span>${esc(TT)}${poste(v)?' · '+esc(poste(v)):''} · Escale ${esc(v.visit)}</span></div>${done?'<em class="m-pill">À clôturer</em>':`<strong>${p==null?'—':fmt(p,1)+' %'}</strong>`}</div>
@@ -871,9 +920,12 @@ function mList(s){
   const tl=T==='ALL'?Object.keys(TERM):[TK[T]], free=tl.map(t=>{ const f=(TERM[t]||[]).filter(i=>!used.has(i)); return `<div><b>${t==='TC3PC'?'TC3':t}</b> · portiques libres : ${f.length?f.join(', '):'aucun'}</div>`; }).join('');
   const lv=L.some(v=>LV.has(v))&&lh?` · mis à jour avec le rapport horaire de ${hTime(lh)}`:'';
   const tot=L.reduce((a,v)=>a+(rm(v)||0),0);
+  const known=new Set(s.vessels.map(v=>v.visit)), nw=sit?sit.vessels.filter(e=>e.status==='Accosté'&&!known.has(e.visit)&&(T==='ALL'||!posteTerm(e.poste)||posteTerm(e.poste)===T)):[];
+  const ncard=e=>{ const done=Math.max(0,e.total-e.restTotal), pc=e.total?100*done/e.total:null; return `<article class="m-card"><div class="m-ch">${IC.ship}<div><b>${esc(e.name)}</b><span>${esc(posteTerm(e.poste)||'')}${e.poste?' · '+esc(e.poste):''} · Escale ${esc(e.visit)}</span></div><strong>${pc==null?'—':fmt(pc,1)+' %'}</strong></div>
+      <div class="m-prog">${mBar(pc)}<div><span><b>${fmt(done)}</b> faits</span><span><b>${fmt(e.restTotal)}</b> restants</span></div></div><p class="m-note" style="margin:6px 4px 2px">Situation de 08 h (nouvel accostage) : en attente du prochain rapport de shift pour le détail.</p></article>`; };
   return mTop('Suivez vos navires à tout instant',`Terminal ${T==='ALL'?'TCE + TC3':T} · rapport de shift ${esc(LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}${lv}`)
    +`<div class="m-body"><div class="m-kpi"><div><b>${L.filter(v=>v.rem>0).length}</b><span>en cours</span></div><div><b>${fmt(tot)}</b><span>restants</span></div><div><b>${L.filter(v=>v.rem===0).length}</b><span>à clôturer</span></div></div>
-   <h3 class="m-h">Liste des escales · ${T==='ALL'?'TCE + TC3':T}</h3>${L.map(card).join('')||'<p class="m-note">Aucun navire sur ce terminal dans le dernier rapport.</p>'}
+   <h3 class="m-h">Liste des escales · ${T==='ALL'?'TCE + TC3':T}</h3>${L.map(card).join('')||(nw.length?'':'<p class="m-note">Aucun navire sur ce terminal dans le dernier rapport.</p>')}${nw.map(ncard).join('')}
    ${O.length?`<h3 class="m-h">Non rattachés à un terminal (${O.length})</h3>${O.map(card).join('')}`:''}<div class="m-free">${free}</div></div>`;
 }
 const mRow=(ic,l,main,sub)=>`<div class="m-row">${ic}<div class="m-rl"><b>${l}</b>${sub?`<span>${sub}</span>`:''}</div><div class="m-rv">${main}</div></div>`;
@@ -987,6 +1039,31 @@ function renderDir(){
   app.querySelectorAll('[data-cr]').forEach(e=>e.onclick=()=>setCrane(e.dataset.cr));
   const ds=$('#dirDay'); if(ds) ds.onchange=e=>{ dirDay=e.target.value||null; render(); };
 }
+
+function renderPrev(){
+  const app=$('#app'); document.body.classList.add('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
+  const dayK=ts=>new Date(ts).toLocaleDateString('en-CA',{timeZone:TZ}), hhmm=ts=>new Date(ts).toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'});
+  const ddmm=ts=>new Date(ts).toLocaleDateString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit'});
+  const imp=canImp()?`<div class="m-date"><label class="m-up">Importer la situation du jour (fichier Excel)<input type="file" id="sitFile" accept=".xlsx,.xls" hidden></label></div>`:'';
+  if(!sit){ app.innerHTML=mTop('Prévisions & situation','Aucune situation reçue',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucune situation importée</b>Importez le fichier « Situation des navires » reçu chaque jour à 8 h : il alimente les postes à quai, les navires accostés et les arrivées prévues.</div></div>`; mBind(); bindSit(); return; }
+  const V=sit.vessels, quai=V.filter(e=>e.status==='Accosté').sort((a,b)=>(a.berth||0)-(b.berth||0)), prv=V.filter(e=>e.status==='Prévision').sort((a,b)=>(a.eta||0)-(b.eta||0)), dep=V.filter(e=>e.status==='Appareillé');
+  const live=Object.fromEntries(((lastSnap()||{}).vessels||[]).map(v=>[v.visit,v]));
+  const qcard=e=>{ const done=Math.max(0,e.total-e.restTotal), pc=e.total?100*done/e.total:null, a=live[e.visit], tr=posteTerm(e.poste);
+    return `<article class="m-card"><div class="m-ch">${IC.ship}<div><b>${esc(e.name)}</b><span>${tr?esc(tr)+' · ':''}${e.poste?esc(e.poste)+' · ':''}accosté ${e.berth?ddmm(e.berth)+' '+hhmm(e.berth):'—'}</span></div><strong>${pc==null?'—':fmt(pc,1)+' %'}</strong></div>
+      <div class="m-prog">${mBar(pc)}<div><span>Prévu <b>${fmt(e.total)}</b></span><span>Restant à 08 h <b>${fmt(e.restTotal)}</b></span></div></div>
+      <div class="d-pg"><span>Import : <b>${fmt(e.rest.impP)}</b> restants sur ${fmt(e.prog.impP)}</span><span>Export plein : <b>${fmt(e.rest.expP)}</b> sur ${fmt(e.prog.expP)}</span><span>Export vide : <b>${fmt(e.rest.expV)}</b> sur ${fmt(e.prog.expV)}</span></div>
+      <p class="m-note" style="margin:4px 4px 2px">${esc(e.armateur)}${e.consignataire?' · '+esc(e.consignataire):''}${e.len?' · '+e.len+' m':''}${a?` · Application maintenant : <b>${fmt(rm(a))}</b> restants`:''}</p></article>`; };
+  const byDay=new Map(); prv.forEach(e=>{ const k=e.eta?dayK(e.eta):'—'; if(!byDay.has(k)) byDay.set(k,[]); byDay.get(k).push(e); });
+  const pcard=e=>`<div class="d-pv"><div><b>${esc(e.name)}</b><span>${esc(e.armateur)}${e.consignataire?' · '+esc(e.consignataire):''}${e.len?' · '+e.len+' m':''}</span></div><div><strong>${e.eta?hhmm(e.eta):'—'}</strong><span>${e.total?fmt(e.total)+' mvts prévus':'programme à venir'}</span></div></div>`;
+  app.innerHTML=mTop('Prévisions & situation',`Situation du ${esc(dayLab(sit.date))} à 08 h`,false,true)+`<div class="m-body">${imp}
+    <div class="m-kpi"><div><b>${quai.length}</b><span>à quai</span></div><div><b>${prv.length}</b><span>attendus</span></div><div><b>${fmt(quai.reduce((a,e)=>a+e.restTotal,0))}</b><span>restants à quai</span></div></div>
+    <h3 class="m-h">À quai</h3>${quai.map(qcard).join('')||'<p class="m-note">Aucun navire accosté.</p>'}
+    <h3 class="m-h">Arrivées prévues</h3>${[...byDay].map(([k,L])=>`<div class="d-day">${k==='—'?'Date inconnue':esc(dayLab(k))}</div>${L.map(pcard).join('')}`).join('')||'<p class="m-note">Aucune arrivée prévue.</p>'}
+    ${dep.length?`<h3 class="m-h">Appareillés</h3><p class="m-note">${dep.map(e=>esc(e.name)+(e.dep?' ('+ddmm(e.dep)+' '+hhmm(e.dep)+')':'')).join(' · ')}</p>`:''}
+    <p class="m-note">Source : fichier « Situation des navires porte-conteneurs et prévisions » reçu chaque jour à 8 h. Postes P70–P79 = TCE, P80–P89 = TC3. Les navires appareillés disparaissent de la liste Pilotage.</p></div>`;
+  mBind(); bindSit();
+}
+function bindSit(){ const f=$('#sitFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; }
 /* ---------- render ---------- */
 function render(){
   const on=!!session&&!!me; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel','#tabs'].forEach(q=>$(q).hidden=!on);
@@ -994,14 +1071,15 @@ function render(){
     $('#app').innerHTML=meState==='load'?'<div class="empty"><b>Chargement…</b></div>':`<div class="empty"><b>Compte non autorisé</b>Votre compte (${esc(idOf(session.user.email))}) n'est pas activé ou a été désactivé. Contactez l'administrateur de l'application.</div>`; return; }
   $('#btnImport').hidden=!on||!canImp(); $('#btnPwd').hidden=!on; $('#drop').hidden=!on||!canImp()||(tab!=='ana'&&tab!=='drv');
   if(!on){ showLogin(); return; }
-  { const T=[['dir','Direction'],['pilot','Pilotage']]; if(canDrv()) T.push(['drv','Conducteurs']); T.push(['ana','Analyse']); if(isAdmin()) T.push(['acc','Comptes']);
-    if(!T.some(x=>x[0]===tab)) tab='pilot'; document.body.classList.toggle('dirmode',tab==='dir'); if(tab!=='dir'){ document.body.classList.remove('mobpilot'); document.body.classList.remove('dirwide'); } $('#tabs').innerHTML=T.map(x=>`<button type="button" data-tab="${x[0]}">${x[1]}</button>`).join(''); }
+  { const T=[['dir','Direction'],['pilot','Pilotage'],['prev','Prévisions']]; if(canDrv()) T.push(['drv','Conducteurs']); T.push(['ana','Analyse']); if(isAdmin()) T.push(['acc','Comptes']);
+    if(!T.some(x=>x[0]===tab)) tab='pilot'; document.body.classList.toggle('dirmode',tab==='dir'); if(tab!=='dir'&&tab!=='prev'){ document.body.classList.remove('mobpilot'); document.body.classList.remove('dirwide'); } $('#tabs').innerHTML=T.map(x=>`<button type="button" data-tab="${x[0]}">${x[1]}</button>`).join(''); }
   document.querySelectorAll('#tabs [data-tab]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.tab===tab); b.onclick=()=>{tab=b.dataset.tab;try{ history.replaceState(null,'',tab==='dir'?'#direction':location.pathname+location.search); }catch(e){} render();window.scrollTo(0,0);}; });
   const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
   if(tab!=='acc') accLoaded=false;
   if(tab==='acc'){ renderAcc(); return; }
   if(tab==='drv'){ renderDrv(); return; }
   if(tab==='dir'){ renderDir(); return; }
+  if(tab==='prev'){ renderPrev(); return; }
   liveCalc(); document.body.classList.remove('mobpilot'); { const sg=$('#termSeg'); sg.hidden=!(session&&me&&myTerms().length>1&&(tab==='pilot'||tab==='drv')); sg.querySelectorAll('[data-t]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.t===termSel()); b.onclick=()=>setTerm(b.dataset.t); }); } $('#btnMob').hidden=!fullView();
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
