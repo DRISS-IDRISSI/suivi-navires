@@ -177,3 +177,11 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 - Nouvel écran ☰ → **Prévisions** : navires à quai (prévu, restant à 8 h, avancement), arrivées prévues par jour, appareillés.
 - Pilotage : les navires « Appareillé » disparaissent de la liste ; les navires accostés absents du rapport de shift apparaissent avec l'avancement de la situation.
 - Correction manuelle d'un portique (Direction) : le poste est proposé d'après la situation.
+
+## v7.17 — Navire appareillé marqué à la main + garde-fous situation
+- Écran Prévisions : bouton « Marquer appareillé » sur chaque navire à quai (Administrateurs/Responsables). Le navire disparaît de Pilotage et de la liste « À quai » jusqu'à la prochaine situation (clé DEP:<visite> dans escale_meta).
+- Bandeau d'alerte si la situation affichée n'est pas celle du jour.
+- Une situation plus ancienne ne remplace plus une situation plus récente gardée sur l'appareil.
+
+## v7.18 — Statut « Navire terminé »
+- Le statut « Navire terminé » de la situation est reconnu (comme « Appareillé ») : le navire disparaît de Pilotage et de « À quai », et apparaît dans « Terminés / appareillés ».
