@@ -1,6 +1,6 @@
 /* Service worker minimal : le réseau est toujours prioritaire (pas de version périmée),
    le cache ne sert qu'à ouvrir l'application hors connexion. Les appels Supabase ne sont jamais mis en cache. */
-const CACHE = 'escales-tc3-v32';
+const CACHE = 'escales-tc3-v33';
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));

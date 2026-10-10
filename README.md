@@ -197,3 +197,6 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.21 — Trois niveaux de couleur sur le rendement
 - Vert : mouvements par heure ≥ objectif (24) ; orange : entre 20 et l'objectif ; rouge : moins de 20 (zéro compris). Appliqué à Direction, rendement par shift, vue Portiques, pastilles, historique horaire et alertes (« grue sous le seuil bas »).
 - Le seuil rouge est de 20 (ou l'objectif s'il est inférieur à 20).
+
+## v7.22 — Objectif par défaut = 24
+- L'objectif GMPH vaut 24 par défaut (vert ≥ 24, orange 20–23, rouge < 20) sans réglage préalable. Modifiable depuis Direction (champ « Objectif ») ou le tableau de rendement par shift.

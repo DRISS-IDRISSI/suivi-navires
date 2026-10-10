@@ -269,7 +269,7 @@ const unTerm=(v,s,cv)=>{ const t=vTerms(v,s,cv); return !t.includes('TCE')&&!t.i
 const termVs=s=>{ const cv=craneVessel(s); return s.vessels.filter(v=>inTerm(v,s,cv)); };
 const otherVs=s=>{ if(termSel()==='ALL') return []; const cv=craneVessel(s); return s.vessels.filter(v=>unTerm(v,s,cv)); };
 const showTerm=t=>termSel()==='ALL'||t==='Autre'||TK[termSel()]===t;
-let tab=(location.hash==='#direction'?'dir':'pilot'), dayKey=null, GT=20, meta={}, rtgs=[], drivers=[], drvKey=null, OBJ={rtg:15,sc:10}, SHF=40;
+let tab=(location.hash==='#direction'?'dir':'pilot'), dayKey=null, GT=24, meta={}, rtgs=[], drivers=[], drvKey=null, OBJ={rtg:15,sc:10}, SHF=40;
 
 /* ---------- parsing ---------- */
 function num(v){ if(typeof v==='number') return v; if(v==null) return null;
@@ -443,7 +443,7 @@ const sitByName=nm=>{ if(!sit) return null; const k=normN(nm); const L=sit.vesse
 const posteTerm=po=>{ const m=String(po||'').match(/(\d+)/); if(!m) return /TCE/i.test(po||'')?'TCE':null; const k=+m[1]; return k>=80?'TC3':k>=70?'TCE':null; };   /* P70-P79 = TCE, P80-P89 = TC3 */
 let depM={};
 async function saveGT(v){
-  GT=v>0&&v<=80?v:20; try{ localStorage.setItem('gt',String(GT)); }catch(e){}
+  GT=v>0&&v<=80?v:24; try{ localStorage.setItem('gt',String(GT)); }catch(e){}
   const {error}=await sb.from('escale_meta').upsert({visit:'CFG:GT',poste:String(GT),updated_at:new Date().toISOString()});
   if(error) toast('Objectif gardé sur cet appareil seulement.'); else toast('Objectif GMPH : '+GT+' (partagé)');
   lastSig=''; render();
@@ -1028,7 +1028,7 @@ function renderDir(){
   const D=day?shiftData(day):{st:{},live:null};
   const SC=['S1','S2','S3'];
   const shv=(id,c)=>{ const m=D.st&&D.st[c]; if(m){ const e=m.get(id); return {v:e?e.moves||0:0}; } if(D.live&&D.live.code===c) return {v:D.live.map.get(id)||0,live:true}; return null; };
-  const H=hours.slice(-12), obj=GT||20;
+  const H=hours.slice(-12), obj=GT||24;
   const hmv=(x,id)=>{ const c=x.cranes.find(z=>z.id===id); return c?(c.moves||0):null; };
   const mk=id=>{ const lc=h&&h.cranes.find(z=>z.id===id), lm=lc?lc.moves||0:null, v=cv.get(id);
     return {id,lc,lm,op:lm!=null&&lm>0,v:v&&(lm>0||v.rem>0)?v:null,sh:SC.map(c=>shv(id,c)),hm:H.map(x=>hmv(x,id))}; };
@@ -1062,7 +1062,7 @@ function renderDir(){
   mBind();
   app.querySelectorAll('[data-cr]').forEach(e=>e.onclick=()=>setCrane(e.dataset.cr));
   const ds=$('#dirDay'); if(ds) ds.onchange=e=>{ dirDay=e.target.value||null; render(); };
-  const dg=$('#dirGt'); if(dg) dg.onchange=e=>saveGT(+e.target.value||20);
+  const dg=$('#dirGt'); if(dg) dg.onchange=e=>saveGT(+e.target.value||24);
 }
 
 function renderPrev(){
@@ -1132,7 +1132,7 @@ function render(){
     app.querySelectorAll('.poste').forEach(e=>e.onclick=()=>setPoste(e.dataset.visit));
     const g=$('#goAna'); if(g) g.onclick=ev=>{ev.preventDefault();tab='ana';render();window.scrollTo(0,0);};
     const ds=$('#daySel'); if(ds) ds.onchange=e=>{dayKey=e.target.value;render();};
-    const gt=$('#gt'); if(gt) gt.onchange=e=>{ saveGT(+e.target.value||20); };
+    const gt=$('#gt'); if(gt) gt.onchange=e=>{ saveGT(+e.target.value||24); };
     return;
   }
   app.innerHTML=strip+`
