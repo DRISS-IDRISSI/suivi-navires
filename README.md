@@ -189,3 +189,11 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.19 — Situation par e-mail (automatique) + statut exact affiché
 - Fonctions Edge `ingest-report` v5 et `mailbox` v5 : un fichier dont le nom commence par « Situation » reçu sur la boîte est lu automatiquement et rangé dans la table `situation`.
 - Les statuts inconnus du fichier (ex. « En rade ») sont affichés tels quels sur la ligne du navire dans « Arrivées prévues ».
+
+## v7.20 — Objectif GMPH appliqué partout et mémorisé
+- L'objectif (mouvements par heure et par portique, 20 par défaut) s'applique maintenant à tous les écrans : Direction, rendement par shift, vue Portiques, pastilles, historique horaire et alertes « grue sous l'objectif ». Avant, seuls le rendement par shift le prenait en compte ; les autres utilisaient le minimum du rapport (20).
+- Il est enregistré (clé CFG:GT dans escale_meta) : partagé entre appareils et conservé au rechargement. Réglable depuis l'écran Direction ou le tableau « Rendement des portiques par shift » (Administrateurs et Responsables).
+
+## v7.21 — Trois niveaux de couleur sur le rendement
+- Vert : mouvements par heure ≥ objectif (24) ; orange : entre 20 et l'objectif ; rouge : moins de 20 (zéro compris). Appliqué à Direction, rendement par shift, vue Portiques, pastilles, historique horaire et alertes (« grue sous le seuil bas »).
+- Le seuil rouge est de 20 (ou l'objectif s'il est inférieur à 20).
