@@ -368,7 +368,11 @@ async function loadSnaps(){
   const dd=dr.error?[]:dr.data.map(r=>r.data).reverse();
   /* postes a quai saisis par l'utilisateur (table escale_meta ; a defaut, memoire de cet appareil) */
   const mr=await sb.from('escale_meta').select('visit,poste,updated_at'); let mt={}, cm={}, dp={}, gtv=null;
-  if(!mr.error) mr.data.forEach(r=>{ if(!r.poste) return; if(r.visit==='CFG:GT'){ gtv=+r.poste; } else if(/^DEP:/.test(r.visit)){ dp[r.visit.slice(4)]=Date.parse(r.updated_at)||1; } else if(/^CRANE:/.test(r.visit)){ const q=r.poste.split('|'); cm[r.visit.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:Date.parse(r.updated_at)||0}; } else mt[r.visit]=r.poste; }); else { try{ mt=JSON.parse(localStorage.getItem('postes')||'{}'); cm=JSON.parse(localStorage.getItem('cman')||'{}'); dp=JSON.parse(localStorage.getItem('dep')||'{}'); gtv=+localStorage.getItem('gt')||null; }catch(e){} }
+  const ap=(k,val,ts)=>{ if(k==='CFG:GT'){ gtv=val?+val:null; } else if(/^DEP:/.test(k)){ if(val) dp[k.slice(4)]=ts||1; else delete dp[k.slice(4)]; } else if(/^CRANE:/.test(k)){ if(val){ const q=val.split('|'); cm[k.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:ts||0}; } else delete cm[k.slice(6)]; } else { if(val) mt[k]=val; else delete mt[k]; } };
+  if(!mr.error) mr.data.forEach(r=>{ if(r.poste) ap(r.visit,r.poste,Date.parse(r.updated_at)||0); });
+  pendMigrate();
+  /* modifications faites sur cet appareil et pas encore enregistrees sur le serveur : elles restent visibles et sont renvoyees */
+  { const pd=pendGet(); Object.keys(pd).forEach(k=>ap(k,pd[k].v,pd[k].ts)); if(!mr.error&&Object.keys(pd).length) pendFlush(); }
   if(gtv>0&&gtv<=80) GT=gtv;
   meta=mt; cman=cm; depM=dp;
   { const sr=await sb.from('situation').select('data').order('ts',{ascending:false}).limit(1); let sx=null;
@@ -441,19 +445,45 @@ let sit=null;
 const sitBy=v=>{ if(!sit||!v) return null; return sit.vessels.find(e=>e.visit&&e.visit===String(v))||null; };
 const sitByName=nm=>{ if(!sit) return null; const k=normN(nm); const L=sit.vessels.filter(e=>normN(e.name)===k); return L.find(e=>e.status!=='Appareillé'&&e.status!=='Terminé')||L[0]||null; };
 const posteTerm=po=>{ const m=String(po||'').match(/(\d+)/); if(!m) return /TCE/i.test(po||'')?'TCE':null; const k=+m[1]; return k>=80?'TC3':k>=70?'TCE':null; };   /* P70-P79 = TCE, P80-P89 = TC3 */
+/* ---- enregistrement partage (table escale_meta) avec file d'attente locale ---- */
+const pendGet=()=>{ try{ return JSON.parse(localStorage.getItem('pend')||'{}'); }catch(e){ return {}; } };
+const pendSet=o=>{ try{ localStorage.setItem('pend',JSON.stringify(o)); }catch(e){} };
+function pendMigrate(){ /* anciennes versions : memoire locale -> file d'attente */
+  try{ const pd=pendGet(); let ch=false;
+    const P=JSON.parse(localStorage.getItem('postes')||'{}'); Object.keys(P).forEach(k=>{ if(!pd[k]){ pd[k]={v:P[k],ts:Date.now()}; ch=true; } });
+    const C=JSON.parse(localStorage.getItem('cman')||'{}'); Object.keys(C).forEach(k=>{ if(!pd['CRANE:'+k]){ pd['CRANE:'+k]={v:C[k].vessel+'|'+(C[k].poste||''),ts:C[k].ts||Date.now()}; ch=true; } });
+    const D=JSON.parse(localStorage.getItem('dep')||'{}'); Object.keys(D).forEach(k=>{ if(!pd['DEP:'+k]){ pd['DEP:'+k]={v:'1',ts:+D[k]||Date.now()}; ch=true; } });
+    const g=+localStorage.getItem('gt'); if(g>0&&!pd['CFG:GT']){ pd['CFG:GT']={v:String(g),ts:Date.now()}; ch=true; }
+    ['postes','cman','dep','gt'].forEach(k=>localStorage.removeItem(k));
+    if(ch) pendSet(pd); }catch(e){}
+}
+let pendBusy=false;
+async function pendFlush(){ /* renvoie vers le serveur ; retourne le 1er message d'erreur (ou '') */
+  if(pendBusy) return ''; pendBusy=true; let err='';
+  try{ const pd=pendGet();
+    for(const k of Object.keys(pd)){ const e=pd[k];
+      const {error}=await sb.from('escale_meta').upsert({visit:k,poste:e.v||'',updated_at:new Date(e.ts).toISOString()});
+      if(error){ err=err||error.message||String(error); break; }
+      const cur=pendGet(); if(cur[k]&&cur[k].ts===e.ts){ delete cur[k]; pendSet(cur); } }
+  }catch(e){ err=String(e&&e.message||e); }
+  pendBusy=false; return err;
+}
+async function metaPut(key,val){ /* val '' = effacer ; retourne '' si partage OK, sinon message d'erreur */
+  const pd=pendGet(); pd[key]={v:val||'',ts:Date.now()}; pendSet(pd);
+  return await pendFlush();
+}
+const failMsg=err=>"Non partagé (serveur : "+err+"). Gardé sur cet appareil, renvoi automatique ensuite.";
 let depM={};
 async function saveGT(v){
-  GT=v>0&&v<=80?v:24; try{ localStorage.setItem('gt',String(GT)); }catch(e){}
-  const {error}=await sb.from('escale_meta').upsert({visit:'CFG:GT',poste:String(GT),updated_at:new Date().toISOString()});
-  if(error) toast('Objectif gardé sur cet appareil seulement.'); else toast('Objectif GMPH : '+GT+' (partagé)');
-  lastSig=''; render();
+  GT=v>0&&v<=80?v:24; const err=await metaPut('CFG:GT',String(GT));
+  toast(err?failMsg(err):'Objectif GMPH : '+GT+' (partagé)');
+  lastSig=''; render(); loadSnaps();
 }
 const goneV=visit=>{ if(depM[visit]) return true; const e=sitBy(visit); return !!e&&(e.status==='Appareillé'||e.status==='Terminé'); };
 const gone=v=>goneV(v.visit);
 async function setDep(visit,on){
-  const now=new Date().toISOString(), {error}=await sb.from('escale_meta').upsert({visit:'DEP:'+visit,poste:on?'1':null,updated_at:now});
-  if(error){ try{ const c=JSON.parse(localStorage.getItem('dep')||'{}'); if(on) c[visit]=Date.now(); else delete c[visit]; localStorage.setItem('dep',JSON.stringify(c)); }catch(e){} toast('Enregistré sur cet appareil seulement.'); }
-  else toast(on?'Navire marqué appareillé':'Appareillage annulé');
+  const err=await metaPut('DEP:'+visit,on?'1':'');
+  toast(err?failMsg(err):(on?'Navire marqué appareillé (partagé)':'Appareillage annulé (partagé)'));
   lastSig=''; loadSnaps();
 }
 async function saveSituation(x){
@@ -624,20 +654,16 @@ async function setCrane(id){
   const m=manFor(id), cur=m?m.vessel:'', v=prompt("Navire actuellement servi par "+id+" (ex. : MIMMI SCHULTE).\nLaisser vide pour revenir à l'information du rapport.",cur);
   if(v===null) return; const nm=v.trim().toUpperCase(); let po='';
   if(nm){ const se=sitByName(nm); const r=prompt("Poste à quai de ce navire (ex. : P83)",m&&m.vessel===nm?m.poste:(se&&se.poste)||''); if(r===null) return; po=r.trim(); }
-  const key='CRANE:'+id, now=new Date().toISOString();
-  const {error}=await sb.from('escale_meta').upsert({visit:key,poste:nm?nm+'|'+po:null,updated_at:now});
-  if(error){ try{ const c=JSON.parse(localStorage.getItem('cman')||'{}'); if(nm) c[id]={vessel:nm,poste:po,ts:Date.now()}; else delete c[id]; localStorage.setItem('cman',JSON.stringify(c)); }catch(e){} toast('Enregistré sur cet appareil seulement.'); }
-  else toast(nm?'Affectation enregistrée':'Retour au rapport');
+  const err=await metaPut('CRANE:'+id,nm?nm+'|'+po:'');
+  toast(err?failMsg(err):(nm?'Affectation enregistrée et partagée':'Retour au rapport (partagé)'));
   lastSig=''; loadSnaps();
 }
 async function setPoste(visit){
   const cur0=meta[visit]||'', r=prompt("Poste à quai de l'escale "+visit+" (ex. : Poste 4). Laisser vide pour effacer.",cur0);
   if(r===null) return; const p=r.trim();
-  const {error}=await sb.from('escale_meta').upsert({visit,poste:p||null,updated_at:new Date().toISOString()});
-  if(error){ try{ const m=JSON.parse(localStorage.getItem('postes')||'{}'); if(p) m[visit]=p; else delete m[visit]; localStorage.setItem('postes',JSON.stringify(m)); }catch(e){}
-    toast("Table escale_meta absente : poste gardé sur cet appareil seulement (voir SUPABASE_table_escale_meta.sql)."); }
-  else toast('Poste enregistré');
   if(p) meta[visit]=p; else delete meta[visit]; lastSig=''; render();
+  const err=await metaPut(visit,p);
+  toast(err?failMsg(err):'Poste enregistré (partagé)'); loadSnaps();
 }
 function chips(ids,s){
   const lh=s===lastSnap()?lastHour():null;

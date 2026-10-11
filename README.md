@@ -200,3 +200,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 
 ## v7.22 — Objectif par défaut = 24
 - L'objectif GMPH vaut 24 par défaut (vert ≥ 24, orange 20–23, rouge < 20) sans réglage préalable. Modifiable depuis Direction (champ « Objectif ») ou le tableau de rendement par shift.
+
+## v7.23 — Corrections manuelles gardées et partagées
+- Les modifications de poste, d'affectation de portique (navire + poste), de navire appareillé et d'objectif GMPH sont d'abord mises en file d'attente sur l'appareil, puis envoyées à la table `escale_meta`. Tant qu'elles ne sont pas enregistrées sur le serveur, elles restent visibles après rafraîchissement et sont renvoyées automatiquement à chaque chargement.
+- Si le serveur refuse l'écriture, le message exact de Supabase est affiché (au lieu de « enregistré sur cet appareil seulement »).
+- Les anciennes sauvegardes locales (postes, cman, dep, gt) sont migrées automatiquement.
+- À faire une fois : exécuter `SUPABASE_table_escale_meta.sql` dans Supabase > SQL Editor (ajoute les colonnes/droits manquants).
