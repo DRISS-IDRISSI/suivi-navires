@@ -206,3 +206,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 - Si le serveur refuse l'écriture, le message exact de Supabase est affiché (au lieu de « enregistré sur cet appareil seulement »).
 - Les anciennes sauvegardes locales (postes, cman, dep, gt) sont migrées automatiquement.
 - À faire une fois : exécuter `SUPABASE_table_escale_meta.sql` dans Supabase > SQL Editor (ajoute les colonnes/droits manquants).
+
+## v7.24 — Correction manuelle d'un portique appliquée à tout le navire
+- L'affectation manuelle d'un portique (Direction) est maintenant prise en compte partout : la liste des portiques du navire (Pilotage > Portiques) ajoute le portique ajouté à la main et le retire de son ancien navire.
+- Saisir « - » comme navire = portique sur aucun navire (le retire de la liste du navire du rapport).
+- Le poste saisi est aussi enregistré pour le navire (visible dans Pilotage).
+- Valable jusqu'au prochain rapport de fin de shift.

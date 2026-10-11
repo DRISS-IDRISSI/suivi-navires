@@ -554,7 +554,12 @@ function alertsFor(s){
 const lastSnap=()=>snaps[snaps.length-1], lastHour=()=>hours[hours.length-1];
 /* la fenetre horaire est-elle posterieure au dernier rapport de shift ? (sinon ses mouvements sont deja comptes dans ce rapport) */
 const afterSnap=h=>{const l=lastSnap();return !!l&&h.ts-3600000>=l.ts-10*60000;};
-const HR=3600000, craneVessel=sn=>{ const m=new Map(), sc=new Map(), l=sn||lastSnap(); /* une grue peut figurer sur 2 navires (ancien termine + nouveau) : on retient celui ou elle a le plus travaille, puis celui encore en cours */ if(l) l.vessels.forEach(v=>v.cranes.forEach(c=>{ const k=(c.moves||0)*1000+((v.rem||0)>0?1:0); if(!sc.has(c.id)||k>sc.get(c.id)){ sc.set(c.id,k); m.set(c.id,v); } })); return m; };
+const HR=3600000, craneVessel=sn=>{ const m=new Map(), sc=new Map(), l=sn||lastSnap(); /* une grue peut figurer sur 2 navires (ancien termine + nouveau) : on retient celui ou elle a le plus travaille, puis celui encore en cours */ if(l) l.vessels.forEach(v=>v.cranes.forEach(c=>{ const k=(c.moves||0)*1000+((v.rem||0)>0?1:0); if(!sc.has(c.id)||k>sc.get(c.id)){ sc.set(c.id,k); m.set(c.id,v); } }));
+  /* corrections manuelles (navire saisi a la main) : prioritaires sur le rapport tant qu'aucun nouveau rapport de shift n'est arrive ; « - » = portique sur aucun navire */
+  if(l) Object.keys(cman).forEach(id=>{ const mf=manFor(id); if(!mf) return; if(mf.vessel==='-'){ m.delete(id); return; }
+    const k=normN(mf.vessel), L=l.vessels, tv=L.find(x=>normN(x.name)===k&&(x.rem||0)>0)||L.find(x=>normN(x.name)===k)||L.find(x=>{ const y=normN(x.name); return y&&k&&(y.startsWith(k)||k.startsWith(y)); });
+    if(tv) m.set(id,tv); else m.delete(id); });
+  return m; };
 const stCls=st=>/LOW/i.test(st)?'low':/CHECK/i.test(st)?'chk':/OK/i.test(st)?'ok':'na';
 const stPill=st=>/LOW/i.test(st)?'p-crit':/CHECK/i.test(st)?'p-warn':/OK/i.test(st)?'p-good':'p-info';
 const stLab=st=>/LOW/i.test(st)?'Faible':/CHECK/i.test(st)?'À vérifier':/OK/i.test(st)?'OK':st;
@@ -641,7 +646,7 @@ function escalesTable(){
 /* ---------- v4 : pilotage (vue manager) ---------- */
 const TERM={TCE:['PT05','PT08','PT09','PT10','PT11'],TC3PC:['STS1','STS2','STS3','STS4']};
 const termOf=id=>/^PT/i.test(id)?'TCE':/^STS/i.test(id)?'TC3PC':/^(RORO|DTV)/i.test(id)?'TCE':'Autre';
-const asg=(v,s,cv)=>{ cv=cv||craneVessel(s); return v.cranes.filter(c=>cv.get(c.id)===v).map(c=>c.id); };
+const asg=(v,s,cv)=>{ cv=cv||craneVessel(s); const a=v.cranes.filter(c=>cv.get(c.id)===v).map(c=>c.id); cv.forEach((x,id)=>{ if(x===v&&!a.includes(id)) a.push(id); }); return a.sort(); };
 /* un navire est opere par un seul terminal : celui de ses portiques ayant le plus travaille ; RORO / DTV et navires sans portique connu = TCE */
 const vTerms=(v,s,cv)=>{ const a=asg(v,s,cv), pool=a.length?v.cranes.filter(c=>a.includes(c.id)):v.cranes.filter(c=>(c.moves||0)>0), L=pool.length?pool:v.cranes, w={};
   L.forEach(c=>{ const t=termOf(c.id); if(t==='Autre') return; w[t]=(w[t]||0)+(c.moves||0)+0.001; });
@@ -651,10 +656,12 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(); if(sn&&m.ts<sn.ts) return null; return m; };
 async function setCrane(id){
-  const m=manFor(id), cur=m?m.vessel:'', v=prompt("Navire actuellement servi par "+id+" (ex. : MIMMI SCHULTE).\nLaisser vide pour revenir à l'information du rapport.",cur);
+  const m=manFor(id), cur=m?m.vessel:'', v=prompt("Navire actuellement servi par "+id+" (ex. : MIMMI SCHULTE).\nTapez - si ce portique ne travaille sur aucun navire.\nLaisser vide pour revenir à l'information du rapport.",cur);
   if(v===null) return; const nm=v.trim().toUpperCase(); let po='';
-  if(nm){ const se=sitByName(nm); const r=prompt("Poste à quai de ce navire (ex. : P83)",m&&m.vessel===nm?m.poste:(se&&se.poste)||''); if(r===null) return; po=r.trim(); }
+  if(nm&&nm!=='-'){ const se=sitByName(nm); const r=prompt("Poste à quai de ce navire (ex. : P83)",m&&m.vessel===nm?m.poste:(se&&se.poste)||''); if(r===null) return; po=r.trim(); }
   const err=await metaPut('CRANE:'+id,nm?nm+'|'+po:'');
+  /* le poste saisi vaut aussi pour le navire (visible dans Pilotage) */
+  if(!err&&nm&&nm!=='-'&&po){ const sn=lastSnap(), nk=normN(nm), tv=sn&&(sn.vessels.find(x=>normN(x.name)===nk&&(x.rem||0)>0)||sn.vessels.find(x=>normN(x.name)===nk)); if(tv&&poste(tv)!==po) await metaPut(tv.visit,po); }
   toast(err?failMsg(err):(nm?'Affectation enregistrée et partagée':'Retour au rapport (partagé)'));
   lastSig=''; loadSnaps();
 }
@@ -1068,7 +1075,7 @@ function renderDir(){
   const status=r=>r.op?['g','En opération']:(r.lc&&/CHECK/i.test(r.lc.status))?['w','À vérifier']:r.lm===0?(r.v&&r.v.rem>10?['c',"À l'arrêt"]:['','Inactif']):['','n/d'];
   const sub=h?`Rapport horaire de ${esc(h.from)}–${esc(h.to)}`+(age!=null?` · il y a ${age<90?Math.round(age)+' min':Math.round(age/60)+' h'}`:''):'Aucun rapport horaire reçu';
   const kp=(v,l)=>`<div><b>${v}</b><span>${l}</span></div>`, nv=x=>x==null?'—':fmt(x);
-  const vn=r=>{ const m=manFor(r.id), n=m?m.vessel:(r.v?r.v.name:''), po=m?m.poste:(r.v?poste(r.v):''); return (n?esc(n):'—')+(po?` <em class="d-po">${esc(po)}</em>`:'')+(canImp()?` <i class="d-ed">${m?'✎ manuel':'✎'}</i>`:''); };
+  const vn=r=>{ const m=manFor(r.id), n=m?(m.vessel==='-'?'':m.vessel):(r.v?r.v.name:''), po=m?(m.vessel==='-'?'':m.poste):(r.v?poste(r.v):''); return (n?esc(n):'—')+(po?` <em class="d-po">${esc(po)}</em>`:'')+(canImp()?` <i class="d-ed">${m?'✎ manuel':'✎'}</i>`:''); };
   const card=r=>{ const [sc,sl]=status(r), mx=Math.max(obj*1.5,...r.hm.map(z=>z||0));
     return `<article class="d-card"><div class="d-h"${canImp()?` data-cr="${esc(r.id)}"`:''}>${IC.crane}<div class="d-n"><b>${esc(r.id)}<em class="d-st ${sc}">${sl}</em></b><span>${vn(r)}</span></div>
       <div class="d-v ${cls(r.lm)}"><strong>${r.lm==null?'—':fmt(r.lm)}</strong><small>mvts · dernière heure</small></div></div>
