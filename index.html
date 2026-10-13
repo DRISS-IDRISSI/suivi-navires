@@ -94,6 +94,9 @@ td.r,th.r{text-align:right}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:3px;overflow:hidden}
 .seg button{border:0;border-radius:0;background:var(--surface)}
 .seg button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
+.m-seg{display:flex;width:100%;margin:0 0 10px;border-radius:14px;border-color:#c5d2e0}
+.m-seg button{flex:1;padding:12px 6px;font-size:17px;font-weight:700;min-height:0;background:#fff;color:#1f3a6e}
+.m-seg button[aria-pressed=true]{background:var(--bl);color:#fff}
 .leg{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0 0;font-size:12px;color:var(--fg-2)}
 .leg i{display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle}
 svg{display:block;width:100%;height:auto}
@@ -240,7 +243,7 @@ body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
     <input id="file" type="file" accept=".xlsx,.xls" multiple hidden>
   </div>
 </div>
-<div class="seg" id="termSeg" role="group" aria-label="Terminal" hidden><button type="button" data-t="TCE">TCE</button><button type="button" data-t="TC3">TC3</button><button type="button" data-t="ALL">Tous</button></div>
+<div class="seg" id="termSeg" role="group" aria-label="Terminal" hidden><button type="button" data-t="TCE">TCE</button><button type="button" data-t="TC3">TC3</button><button type="button" data-t="ALL">TCE+TC3</button></div>
 <nav class="tabs" id="tabs" aria-label="Rubriques"><button type="button" data-tab="pilot">Pilotage</button><button type="button" data-tab="drv">Conducteurs</button><button type="button" data-tab="ana">Analyse</button></nav></header>
 
 <div class="drop" id="drop">Import manuel (secours) : glissez ici le rapport horaire (REP_QUAY_CRANE_DELAYS&hellip; ou REP_CRANE_DELAYS_WITH_SQL&hellip;) ou le rapport de fin de shift (REP_MM_END_SHIFT&hellip;). En fonctionnement normal, les rapports arrivent seuls depuis la bo&icirc;te mail.</div>
@@ -270,6 +273,12 @@ const TK={TCE:'TCE',TC3:'TC3PC'};
 const termSel=()=>{ const A=myTerms(); let t=TSEL==='TCE'||TSEL==='TC3'||TSEL==='ALL'?TSEL:(!fullView()?'TC3':'ALL');
   if(A.length===1) return A[0]; if(t!=='ALL'&&!A.includes(t)) t=A[0]; return t; };
 function setTerm(t){ if(t!=='ALL'&&!myTerms().includes(t)) return; TSEL=t; try{localStorage.setItem('term',t);}catch(e){} mScr='list'; mMenu=false; render(); window.scrollTo(0,0); }
+/* sélecteur 3 positions : TCE | TC3 | TCE+TC3 (affiché seulement si l'utilisateur a accès aux deux terminaux) */
+const TSEG=[['TCE','TCE'],['TC3','TC3'],['ALL','TCE+TC3']];
+let DSEL=(()=>{try{return localStorage.getItem('dterm')||'ALL';}catch(e){return 'ALL';}})();
+const dirTerm=()=>{ const A=myTerms(); if(A.length===1) return A[0]; return DSEL==='TCE'||DSEL==='TC3'?(A.includes(DSEL)?DSEL:'ALL'):'ALL'; };
+function setDirTerm(t){ DSEL=t; try{localStorage.setItem('dterm',t);}catch(e){} render(); }
+const segHtml=(cur,key)=>myTerms().length>1?`<div class="seg m-seg" role="group" aria-label="Terminal">${TSEG.map(([k,l])=>`<button type="button" data-tsel="${key}:${k}" aria-pressed="${k===cur}">${l}</button>`).join('')}</div>`:'';
 const inTerm=(v,s,cv)=>{ const t=termSel(); return t==='ALL'||vTerms(v,s,cv).includes(TK[t]); };
 const unTerm=(v,s,cv)=>{ const t=vTerms(v,s,cv); return !t.includes('TCE')&&!t.includes('TC3PC'); };
 const termVs=s=>{ const cv=craneVessel(s); return s.vessels.filter(v=>inTerm(v,s,cv)); };
@@ -567,8 +576,19 @@ const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
 let session=null, lastSig='';
 function mergeSnaps(list){ const m=new Map(snaps.map(s=>[s.id,s])); list.forEach(s=>m.set(s.id,s)); snaps=[...m.values()].sort((a,b)=>a.ts-b.ts); if(!sel||!m.has(sel)) sel=snaps.length?snaps[snaps.length-1].id:null; }
 function toast(t){ const e=$('#toast'); e.textContent=t; e.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>e.hidden=true,4200); }
-async function loadSnaps(){
-  const {data,error}=await sb.from('snapshots').select('data').order('ts',{ascending:true});
+/* session expirée (JWT expired) : on tente un renouvellement silencieux, sinon retour à l'écran de connexion */
+let jwtBusy=false;
+async function fixJwt(){
+  if(jwtBusy) return false; jwtBusy=true;
+  try{ const r=await sb.auth.refreshSession(); if(r.data&&r.data.session){ session=r.data.session; return true; } }catch(e){}
+  finally{ jwtBusy=false; }
+  toast('Session expirée : reconnexion nécessaire'); try{ await sb.auth.signOut(); }catch(e){}
+  return false;
+}
+const isJwtErr=e=>!!e&&/JWT|token.*expired|expired.*token/i.test(String(e.message||e));
+async function loadSnaps(retry){
+  let {data,error}=await sb.from('snapshots').select('data').order('ts',{ascending:true});
+  if(error&&isJwtErr(error)&&!retry){ if(await fixJwt()) return loadSnaps(true); return; }
   if(error){ toast('Lecture impossible : '+error.message); return; }
   /* rapports horaires (8 derniers jours) : si la table n'existe pas encore, l'application fonctionne sans */
   const hr=await sb.from('hourly').select('data').order('ts',{ascending:false}).limit(200);
@@ -620,7 +640,7 @@ function showLogin(){
     <label for="em" class="sub">Identifiant (ex. FELLAH)</label><input id="em" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
     <label for="pw" class="sub">Mot de passe</label><input id="pw" type="password" autocomplete="current-password" required>
     <button class="primary" type="submit">Se connecter</button><div class="note" id="lerr"></div></form>`;
-  $('#lf').onsubmit=async e=>{ e.preventDefault(); const idt=$('#em').value.trim().toLowerCase(); const {error}=await sb.auth.signInWithPassword({email:idt.includes('@')?idt:idt+'@'+IDOM,password:$('#pw').value}); if(error) $('#lerr').textContent='Identifiant ou mot de passe incorrect.'; };
+  $('#lf').onsubmit=async e=>{ e.preventDefault(); const idt=$('#em').value.trim().toLowerCase(); const {error}=await sb.auth.signInWithPassword({email:idt.includes('@')?idt:idt+'@'+IDOM,password:$('#pw').value}); if(error){ const m=String(error.message||''), st=error.status||0; $('#lerr').textContent=/invalid login|credentials/i.test(m)?'Identifiant ou mot de passe incorrect.':(/rate limit|too many/i.test(m)||st===429)?'Trop de tentatives : patientez quelques minutes puis réessayez.':(/fetch|network|failed/i.test(m)||!st)?'Connexion au serveur impossible : vérifiez le réseau (Wi-Fi / données) puis réessayez.':'Connexion refusée : '+m; } };
 }
 
 /* ---------- situation quotidienne des navires (fichier recu chaque jour a 8 h) ---------- */
@@ -872,7 +892,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.28';
+const APP_V='7.30';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
@@ -1163,18 +1183,20 @@ const IC={
 };
 function mTop(title,sub,back,noChip){
   return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
-    <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div>${noChip?'<span style="width:44px"></span>':`<button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TC3':termSel()}${myTerms().length>1?' ⇄':''}</button>`}</div>
+    <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div>${noChip?'<span style="width:44px"></span>':`<button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TCE+TC3':termSel()}${myTerms().length>1?' ⇄':''}</button>`}</div>
   ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab!=='pilot'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':''}${tab!=='dir'?'<button type="button" data-m="dir">Direction</button>':''}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="prev">Prévisions (situation 8 h)</button><button type="button" data-m="traf">Trafic · comparaison 2025</button><button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
 async function hardReload(){ toast('Rechargement…'); try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){} location.reload(); }
-function mBind(){
+function tselBind(){ document.querySelectorAll('#app [data-tsel]').forEach(b=>b.onclick=()=>{ const [k,t]=b.dataset.tsel.split(':'); if(k==='dir') setDirTerm(t); else setTerm(t); }); }
+function mBind(){ tselBind();
   document.querySelectorAll('#app [data-m]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.m, v=b.dataset.v;
     if(a==='menu'){ mMenu=!mMenu; render(); return; }
     mMenu=false;
     if(a==='shgo'){ const d=$('#mShDate').value; if(d) mShDate=d; mShCodes=[...document.querySelectorAll('.m-shc:checked')].map(x=>x.value); if(!mShCodes.length) mShCodes=['S1']; render(); return; }
-    if(a==='term'){ if(myTerms().length>1) setTerm(termSel()==='TC3'?'TCE':'TC3'); return; }
+    if(a==='term'){ if(myTerms().length>1) setTerm({TC3:'TCE',TCE:'ALL',ALL:'TC3'}[termSel()]||'TC3'); return; }
+    if(a==='tsel'){ return; }
     if(a==='back'){ if(history.state&&history.state.m) history.back(); else { mScr='list'; render(); } return; }
     if(a==='ref'){ lastSig=''; monLoaded=false; if(tab==='traf') render(); loadSnaps(); toast('Actualisation…'); return; }
     if(a==='pwd'){ pwdModal(); return; }
@@ -1201,7 +1223,7 @@ function mList(s){
   const ncard=e=>{ const done=Math.max(0,e.total-e.restTotal), pc=e.total?100*done/e.total:null; return `<article class="m-card"><div class="m-ch">${IC.ship}<div><b>${esc(e.name)}</b><span>${esc(posteTerm(e.poste)||'')}${e.poste?' · '+esc(e.poste):''} · Escale ${esc(e.visit)}</span></div><strong>${pc==null?'—':fmt(pc,1)+' %'}</strong></div>
       <div class="m-prog">${mBar(pc)}<div><span><b>${fmt(done)}</b> faits</span><span><b>${fmt(e.restTotal)}</b> restants</span></div></div><p class="m-note" style="margin:6px 4px 2px">Situation de 08 h (nouvel accostage) : en attente du prochain rapport de shift pour le détail.</p></article>`; };
   return mTop('Suivez vos navires à tout instant',`Terminal ${T==='ALL'?'TCE + TC3':T} · rapport de shift ${esc(LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}${lv}`)
-   +`<div class="m-body"><div class="m-kpi"><div><b>${L.filter(v=>v.rem>0).length}</b><span>en cours</span></div><div><b>${fmt(tot)}</b><span>restants</span></div><div><b>${L.filter(v=>v.rem===0).length}</b><span>à clôturer</span></div></div>
+   +`<div class="m-body">${segHtml(T,'pilot')}<div class="m-kpi"><div><b>${L.filter(v=>v.rem>0).length}</b><span>en cours</span></div><div><b>${fmt(tot)}</b><span>restants</span></div><div><b>${L.filter(v=>v.rem===0).length}</b><span>à clôturer</span></div></div>
    <h3 class="m-h">Liste des escales · ${T==='ALL'?'TCE + TC3':T}</h3>${L.map(card).join('')||(nw.length?'':'<p class="m-note">Aucun navire sur ce terminal dans le dernier rapport.</p>')}${nw.map(ncard).join('')}
    ${O.length?`<h3 class="m-h">Non rattachés à un terminal (${O.length})</h3>${O.map(card).join('')}`:''}<div class="m-free">${free}</div></div>`;
 }
@@ -1272,7 +1294,7 @@ function renderMobile(s){
 let dirDay=null;
 function renderDir(){
   const app=$('#app'); document.body.classList.add('mobpilot'); document.body.classList.add('dirwide'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
-  const allowed=myTerms(), groups=['TC3','TCE'].filter(t=>allowed.includes(t)).map(t=>({t,ids:TERM[TK[t]]||[]}));
+  const allowed=myTerms(), dsel=dirTerm(), groups=['TC3','TCE'].filter(t=>allowed.includes(t)&&(dsel==='ALL'||dsel===t)).map(t=>({t,ids:TERM[TK[t]]||[]}));
   const allIds0=groups.flatMap(g=>g.ids), h=lastHour(), s=lastSnap(), cv=s?craneVessel(s):new Map(), live=liveShift();
   const liveDay=live?new Date(live.start).toISOString().slice(0,10):null;
   const days=[...new Set([...snaps.map(dayOf),liveDay].filter(Boolean))].sort();
@@ -1304,14 +1326,14 @@ function renderDir(){
       <div class="d-hr" aria-label="Mouvements par heure">${r.hm.map((m,i)=>`<div class="${cls(m)}"><b>${m==null?'–':m}</b><i style="height:${m?Math.max(4,Math.round(100*m/mx*0.4)):2}px"></i><u>${esc((H[i].to||'').slice(0,2))}h</u></div>`).join('')}</div></article>`; };
   const group=g=>`<h3 class="m-h">${g.t==='TC3'?'TC3 · portiques STS':'TCE · portiques PT'}</h3><div class="d-grid">${g.ids.map(id=>card(R[id])).join('')}</div>
     <div class="d-tot"><div class="m-two">${SC.map((c,i)=>{ const x=tot(g.ids,i); return `<div><b>${nv(x)}</b><span>Total ${c}</span></div>`; }).join('')}</div></div>`;
-  app.innerHTML=mTop('Direction · '+groups.map(g=>g.t).join(' + '),sub,false,true)+
-   `<div class="m-body">${age!=null&&age>100?`<div class="d-warn">Dernier rapport horaire reçu il y a ${Math.round(age/60)} h : les chiffres « dernière heure » ne sont plus d'actualité.</div>`:''}
+  app.innerHTML=mTop('Direction · '+(groups.length>1?'TCE + TC3':groups[0].t),sub,false,true)+
+   `<div class="m-body">${segHtml(dsel,'dir')}${age!=null&&age>100?`<div class="d-warn">Dernier rapport horaire reçu il y a ${Math.round(age/60)} h : les chiffres « dernière heure » ne sont plus d'actualité.</div>`:''}
     <div class="m-kpi">${kp(nOp,'portiques en opération')}${kp(h?fmt(sumLast):'—','mvts dernière heure')}${kp(h&&nOp?fmt(sumLast/nOp,1):'—','moy. / portique')}</div>
     <div class="m-kpi">${SC.map((c,i)=>kp(nv(T[i]),c+(D.live&&D.live.code===c?' · en cours':''))).join('')}</div>
     <p class="m-note" style="margin:2px 2px 8px">Journée du ${day?dayLab(day):'—'} · ${TJ==null?'—':fmt(TJ)} mouvements (S1 07–15 · S2 15–23 · S3 23–07)</p>
     <div class="m-date"><input type="date" id="dirDay" value="${day}" max="${maxDay}"></div>
      ${canImp()?`<div class="m-obj"><label for="dirGt">Objectif (mouvements par heure et par portique)</label><input type="number" id="dirGt" min="1" max="80" value="${GT}"></div>`:''}
-    ${groups.filter(g=>g.ids.length).map(group).join('')||`<div class="empty"><b>Aucun portique en opération</b>${h?'Aucun mouvement sur le dernier rapport horaire ('+esc(h.from)+'–'+esc(h.to)+').':'Aucun rapport horaire reçu.'}</div>`}
+    ${groups.filter(g=>g.ids.length).map(group).join('')||`<div class="empty"><b>Aucun portique en opération${dsel==='ALL'?'':' sur '+dsel}</b>${h?'Aucun mouvement sur le dernier rapport horaire ('+esc(h.from)+'–'+esc(h.to)+').':'Aucun rapport horaire reçu.'}</div>`}
     <p class="m-note">Seuls les portiques en opération (au moins 1 mouvement sur le dernier rapport horaire) sont affichés. Vert : ${obj} mouvements par heure ou plus (objectif) · orange : entre ${LO()} et ${obj} · rouge : moins de ${LO()}. Les barres montrent les 12 dernières heures (heure de fin de fenêtre). Les shifts viennent des rapports de fin de shift ; le shift en cours est complété avec les rapports horaires. Actualisation automatique chaque minute.</p><p class="m-note" id="diag">${diagLine()}</p>${canImp()?'<p class="m-note">Navire ou poste erroné (portique changé de navire en cours de shift) : touchez la carte du portique pour le corriger. La correction reste valable jusqu\'au prochain rapport de fin de shift.</p>':''}</div>`;
   mBind();
   app.querySelectorAll('[data-cr]').forEach(e=>e.onclick=()=>setCrane(e.dataset.cr));
@@ -1664,6 +1686,8 @@ function start(){ if(!session){ me=null; meState='load'; render(); return; } loa
 sb.auth.getSession().then(({data})=>{ session=data.session; start(); });
 sb.auth.onAuthStateChange((ev,s)=>{ if(ev==='USER_UPDATED'){ session=s; return; } if(!s) closeModal(); session=s; lastSig=''; start(); });
 setInterval(()=>{ if(session) loadSnaps(); },60000);
+/* au retour sur l'application (téléphone sorti de veille) : renouveler la session puis recharger */
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&session){ sb.auth.getSession().then(({data})=>{ if(data.session){ session=data.session; loadSnaps(); } }); } });
 if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 </script>
 </body></html>

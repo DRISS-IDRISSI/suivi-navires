@@ -224,6 +224,17 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.30 — Sélecteur de terminal : TCE | TC3 | TCE+TC3
+- Écran Direction : trois boutons en haut (TCE, TC3, TCE+TC3). Les portiques, totaux S1/S2/S3 et indicateurs suivent le choix. Par défaut : TCE+TC3 (comme avant). Le choix est mémorisé.
+- Pilotage (téléphone) : mêmes trois boutons au-dessus de la liste des escales ; la pastille en haut fait défiler TC3 → TCE → TCE+TC3.
+- Pilotage / Conducteurs (ordinateur) : le bouton « Tous » devient « TCE+TC3 ».
+- Un compte limité à un seul terminal ne voit pas le sélecteur.
+- Connexion : messages d'erreur précis (mot de passe incorrect, trop de tentatives, réseau).
+
+## v7.29 — Session expirée (« JWT expired »)
+- Si la lecture échoue parce que la session Supabase a expiré, l'application la renouvelle automatiquement et relit les données ; si le renouvellement est impossible, elle revient à l'écran de connexion (message « Session expirée »).
+- Au retour sur l'application (téléphone sorti de veille), la session est renouvelée puis les données sont rechargées.
+
 ## v7.28 — Trafic et comparaison avec l'an dernier
 - Nouvel écran **Trafic** (menu ☰ > « Trafic · comparaison 2025 ») : à partir du rapport « Suivi Trafic Quotidien » (EVP et boîtes, import / export plein / export vide, global TCE-TC3) il affiche le cumul du mois contre le même nombre de jours de 2025, l'écart en % et en EVP, la courbe cumulée et le tableau jour par jour. Le cumul de l'année s'affiche dès que plusieurs mois sont reçus.
 - Partie **Performance d'exploitation** à partir du « Rapport Journalier de Performance Opérationnelle » (un onglet par jour) : mouvements et rendement portique par terminal, arrêts, rendement du jour (couleurs selon l'objectif GMPH), classement des navires du mois.
