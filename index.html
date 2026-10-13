@@ -555,6 +555,8 @@ const lastSnap=()=>snaps[snaps.length-1], lastHour=()=>hours[hours.length-1];
 /* la fenetre horaire est-elle posterieure au dernier rapport de shift ? (sinon ses mouvements sont deja comptes dans ce rapport) */
 const afterSnap=h=>{const l=lastSnap();return !!l&&h.ts-3600000>=l.ts-10*60000;};
 const HR=3600000, craneVessel=sn=>{ const m=new Map(), sc=new Map(), l=sn||lastSnap(); /* une grue peut figurer sur 2 navires (ancien termine + nouveau) : on retient celui ou elle a le plus travaille, puis celui encore en cours */ if(l) l.vessels.forEach(v=>v.cranes.forEach(c=>{ const k=(c.moves||0)*1000+((v.rem||0)>0?1:0); if(!sc.has(c.id)||k>sc.get(c.id)){ sc.set(c.id,k); m.set(c.id,v); } }));
+  /* rapport horaire nouveau format : il donne le navire exact de chaque portique, plus recent ou egal au rapport de shift => prioritaire */
+  { const hh=lastHour(); if(l&&hh&&(!sn||sn===lastSnap())&&hh.ts>=l.ts) hh.cranes.forEach(c=>{ if(!c.visit) return; const tv=l.vessels.find(x=>x.visit===c.visit)||l.vessels.find(x=>c.vessel&&normN(x.name)===normN(c.vessel)); if(tv) m.set(c.id,tv); else m.delete(c.id); }); }
   /* corrections manuelles (navire saisi a la main) : prioritaires sur le rapport tant qu'aucun nouveau rapport de shift n'est arrive ; « - » = portique sur aucun navire */
   if(l) Object.keys(cman).forEach(id=>{ const mf=manFor(id); if(!mf) return; if(mf.vessel==='-'){ m.delete(id); return; }
     const k=normN(mf.vessel), L=l.vessels, tv=L.find(x=>normN(x.name)===k&&(x.rem||0)>0)||L.find(x=>normN(x.name)===k)||L.find(x=>{ const y=normN(x.name); return y&&k&&(y.startsWith(k)||k.startsWith(y)); });
@@ -654,7 +656,9 @@ const vTerms=(v,s,cv)=>{ const a=asg(v,s,cv), pool=a.length?v.cranes.filter(c=>a
 const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 /* affectation manuelle d'un portique (navire + poste), valable jusqu'au prochain rapport de fin de shift qui fait foi */
 let cman={};
-const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(); if(sn&&m.ts<sn.ts) return null; return m; };
+const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
+/* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
+const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
 async function setCrane(id){
   const m=manFor(id), cur=m?m.vessel:'', v=prompt("Navire actuellement servi par "+id+" (ex. : MIMMI SCHULTE).\nTapez - si ce portique ne travaille sur aucun navire.\nLaisser vide pour revenir à l'information du rapport.",cur);
   if(v===null) return; const nm=v.trim().toUpperCase(); let po='';
@@ -1075,7 +1079,7 @@ function renderDir(){
   const status=r=>r.op?['g','En opération']:(r.lc&&/CHECK/i.test(r.lc.status))?['w','À vérifier']:r.lm===0?(r.v&&r.v.rem>10?['c',"À l'arrêt"]:['','Inactif']):['','n/d'];
   const sub=h?`Rapport horaire de ${esc(h.from)}–${esc(h.to)}`+(age!=null?` · il y a ${age<90?Math.round(age)+' min':Math.round(age/60)+' h'}`:''):'Aucun rapport horaire reçu';
   const kp=(v,l)=>`<div><b>${v}</b><span>${l}</span></div>`, nv=x=>x==null?'—':fmt(x);
-  const vn=r=>{ const m=manFor(r.id), n=m?(m.vessel==='-'?'':m.vessel):(r.v?r.v.name:''), po=m?(m.vessel==='-'?'':m.poste):(r.v?poste(r.v):''); return (n?esc(n):'—')+(po?` <em class="d-po">${esc(po)}</em>`:'')+(canImp()?` <i class="d-ed">${m?'✎ manuel':'✎'}</i>`:''); };
+  const vn=r=>{ const m=manFor(r.id), hc=hcr(r.id), n=m?(m.vessel==='-'?'':m.vessel):(hc?hc.vessel:(r.v?r.v.name:'')), po=m?(m.vessel==='-'?'':m.poste):(hc?(meta[hc.visit]||(sitBy(hc.visit)||{}).poste||''):(r.v?poste(r.v):'')); return (n?esc(n):'—')+(po?` <em class="d-po">${esc(po)}</em>`:'')+(canImp()?` <i class="d-ed">${m?'✎ manuel':'✎'}</i>`:''); };
   const card=r=>{ const [sc,sl]=status(r), mx=Math.max(obj*1.5,...r.hm.map(z=>z||0));
     return `<article class="d-card"><div class="d-h"${canImp()?` data-cr="${esc(r.id)}"`:''}>${IC.crane}<div class="d-n"><b>${esc(r.id)}<em class="d-st ${sc}">${sl}</em></b><span>${vn(r)}</span></div>
       <div class="d-v ${cls(r.lm)}"><strong>${r.lm==null?'—':fmt(r.lm)}</strong><small>mvts · dernière heure</small></div></div>

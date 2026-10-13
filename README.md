@@ -212,3 +212,8 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 - Saisir « - » comme navire = portique sur aucun navire (le retire de la liste du navire du rapport).
 - Le poste saisi est aussi enregistré pour le navire (visible dans Pilotage).
 - Valable jusqu'au prochain rapport de fin de shift.
+
+## v7.25 — Nouveau rapport horaire (navire exact par portique)
+- Le nouveau fichier horaire `REP_CRANE_DELAYS_WITH_SQL` donne pour chaque portique le navire (VISIT_ID, VESSEL_NAME), les mouvements import/export et le minimum requis. Fonction Edge `ingest-report` v6 (lecture des deux formats) et `mailbox` v6 (nom de fichier accepté).
+- Direction et Pilotage > Portiques utilisent ce navire (prioritaire sur le rapport de shift et sur les corrections manuelles plus anciennes). Le poste est repris de la situation du jour ou du poste saisi pour l'escale.
+- Un portique sans navire dans le rapport (CHECK ASSIGN.) garde l'affectation du rapport de shift ; « - » en correction manuelle reste possible.
