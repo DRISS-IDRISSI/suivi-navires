@@ -226,6 +226,7 @@ body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 .tr-k em.g,.tr-v.g{color:#12805c}.tr-k em.c,.tr-v.c{color:#b3261e}.tr-k em.w,.tr-v.w{color:#a86a00}.tr-v{font-weight:700}
 .tr-h{display:block;margin-bottom:6px;color:#1f3a6e}.tr-svg{width:100%;height:auto;display:block}
 .tr-t{width:100%;border-collapse:collapse;font-size:13px}.tr-t th{font-weight:600;color:#5b6f8f;text-align:right;padding:4px 4px;border-bottom:1px solid #d6dce1}.tr-t td{text-align:right;padding:5px 4px;border-bottom:1px solid #eef1f4}.tr-t th:first-child,.tr-t td:first-child{text-align:left}
+table.tr-ds th,table.tr-ds td{font-size:13px;padding-left:4px;padding-right:4px}
 #trSel{width:100%;padding:10px;font-size:16px;border:1px solid #cfd9e3;border-radius:12px;background:#fff;color:#1f3a6e}
 </style></head><body>
 <div class="wrap">
@@ -474,6 +475,98 @@ function parsePerf(wb, sheetRows) {
 }
 
 /* ---------- Trafic (comparaison N-1) et performance du mois : rapports mensuels (table monthly) ---------- */
+const B_MOIS = /^(janvier|f[eé]vrier|mars|a?vril|april|mai|juin|juillet|ao[uûô]t|a[oô]ut|septembre|octobre|novembre|d[eé]cembre)/i;
+function isBilanWb(wb) {
+  const n = (wb.SheetNames || []).map((x) => x.trim());
+  return n.some((x) => /^Tableau de bord Trafic/i.test(x)) && n.includes("TC3") && n.some((x) => /^T\.? ?EST$/i.test(x));
+}
+const BCAT = [["imp", 1], ["impE", 4], ["expP", 7], ["expPE", 10], ["expV", 13], ["expVE", 16], ["gl", 19], ["glE", 22]];
+function bilanSheet(R) {
+  const r0 = R.findIndex((l) => /^janvier/i.test(sTxt(l[0])) && typeof l[1] === "number");
+  if (r0 < 0) throw new Error("Bilan trafic : ligne \xAB Janvier \xBB introuvable.");
+  const g = (row, c) => typeof row[c] === "number" && isFinite(row[c]) ? row[c] : null;
+  const rec = (row, a, b) => {
+    const o = {};
+    for (const [k, c] of BCAT) {
+      const x = g(row, c + a), y = g(row, c + b);
+      o[k] = x;
+      o[k + "0"] = y;
+    }
+    return o;
+  };
+  const months = {};
+  let cur = -1;
+  for (let i = 0; i < 12; i++) {
+    const row = R[r0 + i] || [];
+    if (g(row, 1) != null) months[i + 1] = rec(row, 0, 1);
+    else if (cur < 0) cur = i;
+  }
+  const rc = R[r0 + 12] || [];
+  if (cur >= 0 && typeof rc[0] === "number" && g(rc, 1) != null) months[cur + 1] = rec(rc, 0, 1);
+  let cumul = null;
+  for (let k = 12; k <= 14; k++) {
+    const cum = R[r0 + k] || [];
+    if (/^cumul\s*$/i.test(sTxt(cum[0])) && g(cum, 1) != null) {
+      cumul = rec(cum, 0, 1);
+      break;
+    }
+  }
+  const y25 = {};
+  for (let i = 0; i < 12; i++) {
+    const row = R[r0 + 14 + i] || [];
+    if (g(row, 2) != null) {
+      const o = {};
+      for (const [k, c] of BCAT) o[k] = g(row, c + 1);
+      y25[i + 1] = o;
+    }
+  }
+  return { months, cumul, y25 };
+}
+function parseBilan(wb, sheetRows) {
+  const find = (re) => wb.SheetNames.find((x) => re.test(x.trim()));
+  const nTot = find(/^Tableau de bord Trafic/i), nTc3 = find(/^TC3$/i), nEst = find(/^T\.? ?EST$/i);
+  const T = { TOT: bilanSheet(sheetRows(nTot)), TC3: bilanSheet(sheetRows(nTc3)), TCE: bilanSheet(sheetRows(nEst)) };
+  const Rt = sheetRows(nTot);
+  let asof = "", year = (/* @__PURE__ */ new Date()).getFullYear();
+  for (const l of Rt.slice(0, 8)) {
+    for (const x of l) {
+      if (typeof x === "number" && x > 4e4 && x < 6e4) asof = serialToYmd(x);
+    }
+    for (const x of l) {
+      const m = String(x).match(/(\d{4})\s*\/\s*(\d{4})/);
+      if (m) year = Math.max(+m[1], +m[2]);
+    }
+  }
+  const nm = Object.keys(T.TOT.months).map(Number);
+  if (!nm.length) throw new Error("Bilan trafic : aucun mois renseign\xE9.");
+  const last = Math.max(...nm);
+  let ds = null;
+  const nds = find(/^D\.?S$/i);
+  if (nds) {
+    const D = sheetRows(nds), starts = [];
+    D.forEach((l, i) => {
+      if (/^janvier/i.test(sTxt(l[9])) && typeof l[10] === "number") starts.push(i);
+    });
+    const blk = (r0) => {
+      const o = { m: {}, cumul: null };
+      const rec = (row) => ({ imp: [row[10], row[11]], exp: [row[13], row[14]], vid: [row[16], row[17]], gl: [row[19], row[20]] });
+      for (let i = 0; i < 12; i++) {
+        const row = D[r0 + i] || [];
+        if (typeof row[19] === "number") o.m[i + 1] = rec(row);
+      }
+      for (let k = 12; k <= 14; k++) {
+        const c = D[r0 + k] || [];
+        if (/^cumul/i.test(sTxt(c[9])) && typeof c[19] === "number") {
+          o.cumul = rec(c);
+          break;
+        }
+      }
+      return o;
+    };
+    if (starts.length >= 2) ds = { TCE: blk(starts[0]), TC3: blk(starts[1]) };
+  }
+  return { kind: "bilan", id: "bilan-" + year, year, last: `${year}-${String(last).padStart(2, "0")}`, asof, T, ds };
+}
 const gridRows=ws=>{ const e=XLSX.utils.decode_range(ws['!ref']||'A1').e; return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:'',range:{s:{r:0,c:0},e}}); };
 let mon={}, monLoaded=false, trSel=null;
 async function loadMonthly(){
@@ -504,17 +597,55 @@ function trLine(days){ /* courbe cumulee 2026 / 2025 en EVP */
    <text x="${P}" y="${H-4}" font-size="10" fill="#6b7c93">${trDay(days[0].d)}</text><text x="${W-8}" y="${H-4}" font-size="10" text-anchor="end" fill="#6b7c93">${trDay(days[n-1].d)}</text>
    <text x="${P}" y="11" font-size="10" fill="#6b7c93">${trF(mx)} EVP</text></svg>`;
 }
+/* ---------- bilan mensuel (fichier « Situation du Trafic Conteneur ») : TCE | TC3 | TCE+TC3 ---------- */
+let TRT=(()=>{try{return localStorage.getItem('trterm')||'ALL';}catch(e){return 'ALL';}})();
+const trTerm=()=>{ const A=myTerms(); if(A.length===1) return A[0]; return TRT==='TCE'||TRT==='TC3'?(A.includes(TRT)?TRT:'ALL'):'ALL'; };
+function setTrTerm(t){ TRT=t; try{localStorage.setItem('trterm',t);}catch(e){} render(); }
+const trDays=(y,m)=>new Date(y,m,0).getDate();
+function trBars(rows){ /* barres groupees par mois : 2026 (plein) / 2025 (clair), en EVP */
+  const W=340,H=170,P=30,n=rows.length, mx=Math.max(1,...rows.flatMap(r=>[r.a,r.b||0])), bw=Math.min(16,(W-P-8)/n/2.4), Y=v=>H-22-(H-40)*v/mx;
+  const step=(W-P-8)/n;
+  return `<svg viewBox="0 0 ${W} ${H}" class="tr-svg" role="img" aria-label="EVP par mois 2026 et 2025"><line x1="${P}" y1="${H-22}" x2="${W-8}" y2="${H-22}" stroke="#cfd9e3"/><text x="${P}" y="11" font-size="10" fill="#6b7c93">${trF(mx)} EVP</text>`+
+   rows.map((r,i)=>{ const x=P+step*i+step/2; return `<rect x="${(x-bw-1).toFixed(1)}" y="${Y(r.b||0).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-22-Y(r.b||0)).toFixed(1)}" fill="#c3cddb"/><rect x="${(x+1).toFixed(1)}" y="${Y(r.a).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-22-Y(r.a)).toFixed(1)}" fill="#1f3a6e"/><text x="${x.toFixed(1)}" y="${H-8}" font-size="10" text-anchor="middle" fill="#6b7c93">${esc(r.l)}</text>`; }).join('')+`</svg>`;
+}
+function renderBilan(b){
+  const cur=trTerm(), key=cur==='ALL'?'TOT':cur, S=b.T&&b.T[key]; if(!S) return '';
+  const M=Object.keys(S.months).map(Number).sort((x,y)=>x-y); if(!M.length) return '';
+  const lastM=M[M.length-1], y=b.year, asof=b.asof||'';
+  const sum=f=>M.reduce((a,m)=>a+(S.months[m][f]||0),0);
+  const e1=sum('glE'), e0=sum('glE0'), p=trPct(e1,e0), kp=(t,f)=>{ const a=sum(f),c=sum(f+'0'),q=trPct(a,c); return `<div class="tr-k"><span>${t}</span><b>${trF(a)}</b><small>${y-1} : ${trF(c)}</small><em class="${trC(q)}">${trP(q)}</em></div>`; };
+  const lbl=cur==='ALL'?'TCE + TC3':cur;
+  let h=`<h3 class="m-h">Bilan ${y} contre ${y-1} · ${lbl}</h3>${segHtml(cur,'traf')}`;
+  h+=`<div class="tr-hero ${trC(p)}"><span>EVP global · janvier à ${TR_MOIS[lastM-1]} ${y}</span><b>${trF(e1)}</b><div>${y-1} (même période) : ${trF(e0)} EVP</div><strong>${trP(p)} · ${e1-e0>0?'+':e1-e0<0?'−':''}${trF(Math.abs(e1-e0))} EVP</strong></div>`;
+  h+=`<div class="tr-kpi">${kp('Import (EVP)','impE')}${kp('Export plein (EVP)','expPE')}${kp('Export vide (EVP)','expVE')}${kp('Boîtes (global)','gl')}</div>`;
+  /* ce qu'il faut pour egaler l'annee precedente */
+  const full=Object.keys(S.y25||{}).length===12?Object.values(S.y25).reduce((a,m)=>a+(m.glE||0),0):null;
+  if(full&&lastM<12){ const left=12-lastM, need=full-e1, rest25=[...Array(left)].reduce((a,_,i)=>a+((S.y25[lastM+1+i]||{}).glE||0),0);
+    h+=`<p class="m-note"><b>Pour égaler ${y-1} sur l'année</b> (${trF(full)} EVP) : il reste ${trF(need)} EVP à réaliser, soit ${trF(need/left)} EVP par mois sur ${left} mois (${y-1} sur ces mêmes mois : ${trF(rest25/left)} par mois). Rythme ${TR_MOIS[lastM-1]} ${y} : ${trF((S.months[lastM]||{}).glE)} EVP.</p>`; }
+  const rows=M.map(m=>({m,l:TR_MOIS[m-1].slice(0,3),a:S.months[m].glE||0,b:S.months[m].glE0||0}));
+  h+=`<section class="m-box"><b class="tr-h">EVP par mois : ${y} (foncé) contre ${y-1} (clair)</b>${trBars(rows)}</section>`;
+  h+=`<section class="m-box"><b class="tr-h">Détail mensuel (EVP global)</b><table class="tr-t"><thead><tr><th>Mois</th><th>${y}</th><th>${y-1}</th><th>Écart</th></tr></thead><tbody>${rows.slice().reverse().map(r=>{ const q=trPct(r.a,r.b); return `<tr><td>${TR_MOIS[r.m-1]}</td><td>${trF(r.a)}</td><td>${trF(r.b)}</td><td class="tr-v ${trC(q)}">${trP(q)}</td></tr>`; }).join('')}<tr><td><b>Cumul</b></td><td><b>${trF(e1)}</b></td><td><b>${trF(e0)}</b></td><td class="tr-v ${trC(p)}"><b>${trP(p)}</b></td></tr></tbody></table></section>`;
+  if(cur==='ALL'&&b.T.TCE&&b.T.TC3){ const a=T3=>{ const m=b.T[T3].months; const M2=Object.keys(m); return [M2.reduce((s,k)=>s+(m[k].glE||0),0),M2.reduce((s,k)=>s+(m[k].glE0||0),0)]; };
+    h+=`<section class="m-box"><b class="tr-h">Par terminal (EVP, cumul)</b><table class="tr-t"><thead><tr><th>Terminal</th><th>${y}</th><th>${y-1}</th><th>Écart</th></tr></thead><tbody>${['TCE','TC3'].map(t=>{ const [x,z]=a(t), q=trPct(x,z); return `<tr><td>${t}</td><td>${trF(x)}</td><td>${trF(z)}</td><td class="tr-v ${trC(q)}">${trP(q)}</td></tr>`; }).join('')}</tbody></table></section>`; }
+  /* delai de sejour */
+  if(b.ds){ const T3=cur==='ALL'?['TCE','TC3']:[cur], lm=Math.max(0,...T3.flatMap(t=>Object.keys((b.ds[t]||{m:{}}).m).map(Number)));
+    const fd=n=>n==null?'—':n.toFixed(1).replace('.',',');
+    const cell=v=>v?`<td class="tr-v ${v[0]>v[1]?'c':'g'}">${fd(v[0])}<br><small>${fd(v[1])}</small></td>`:'<td>—</td>';
+    h+=`<section class="m-box"><b class="tr-h">Délai de séjour moyen (jours) · cumul à fin ${lm?TR_MOIS[lm-1]:'—'}</b><table class="tr-t tr-ds"><thead><tr><th>Term.</th><th>Import</th><th>Exp. plein</th><th>Exp. vide</th><th>Global</th></tr></thead><tbody>${T3.map(t=>{ const c=(b.ds[t]||{}).cumul; return `<tr><td>${t}</td>${c?cell(c.imp)+cell(c.exp)+cell(c.vid)+cell(c.gl):'<td colspan="4">—</td>'}</tr>`; }).join('')}</tbody></table><p class="m-note" style="margin:6px 2px 0">En gras : ${y} ; dessous : ${y-1}. Rouge : séjour plus long que l'an dernier. Les mois sans données dans le fichier ne sont pas comptés.</p></section>`; }
+  h+=`<p class="m-note">Source : fichier « Situation du Trafic Conteneur ${y}/${y-1} »${asof?' au '+asof.slice(8,10)+'/'+asof.slice(5,7)+'/'+asof.slice(0,4):''}. Le total TCE + TC3 est celui du fichier ; EVP = équivalents vingt pieds.</p>`;
+  return h;
+}
 function renderTraf(){
   const app=$('#app'); document.body.classList.add('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
   if(!monLoaded){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Chargement…',false,true)+'<div class="m-body"><div class="empty"><b>Chargement…</b></div></div>'; mBind(); loadMonthly().then(()=>render()).catch(()=>{ monLoaded=true; render(); }); return; }
-  const imp=canImp()?`<div class="m-date"><label class="m-up">Importer un rapport (trafic ou performance, fichier Excel)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'';
-  const T=Object.values(mon).filter(x=>x&&x.kind==='trafic').sort((a,b)=>a.ym<b.ym?1:-1), Pm=Object.values(mon).filter(x=>x&&x.kind==='perf');
+  const imp=canImp()?`<div class="m-date"><label class="m-up">Importer un rapport (trafic, performance ou bilan mensuel, fichier Excel)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'';
+  const T=Object.values(mon).filter(x=>x&&x.kind==='trafic').sort((a,b)=>a.ym<b.ym?1:-1), Pm=Object.values(mon).filter(x=>x&&x.kind==='perf'), Bm=Object.values(mon).filter(x=>x&&x.kind==='bilan').sort((a,b)=>b.year-a.year), BL=Bm[0]?renderBilan(Bm[0]):'';
   const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; render(); }; };
-  if(!T.length&&!Pm.length){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Aucun rapport reçu',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucun rapport de trafic</b>Les rapports « Suivi Trafic Quotidien » et « Rapport Journalier de Performance Opérationnelle » arrivent par e-mail (boîte de l'application) ou s'importent ici.</div></div>`; bind(); return; }
+  if(!T.length&&!Pm.length&&!BL){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Aucun rapport reçu',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucun rapport de trafic</b>Les rapports « Suivi Trafic Quotidien » et « Rapport Journalier de Performance Opérationnelle » arrivent par e-mail (boîte de l'application) ou s'importent ici.</div></div>`; bind(); return; }
   const years=[...new Set(T.map(x=>x.ym.slice(0,4)))];
   const opts=[...T.map(x=>['M:'+x.ym,trMois(x.ym)]),...years.filter(y=>T.filter(x=>x.ym.slice(0,4)===y).length>1).map(y=>['Y:'+y,'Cumul '+y+' (mois reçus)'])];
   if(!trSel||!opts.some(o=>o[0]===trSel)) trSel=opts.length?opts[0][0]:null;
-  let body='', sub='';
+  let body='', sub=BL&&!T.length?'Bilan mensuel '+Bm[0].year+' contre '+(Bm[0].year-1):'';
   if(trSel){
     const isY=trSel[0]==='Y', key=trSel.slice(2), L=isY?T.filter(x=>x.ym.slice(0,4)===key):T.filter(x=>x.ym===key);
     const days=L.slice().sort((a,b)=>a.ym<b.ym?-1:1).flatMap(x=>x.days), last=days[days.length-1].d;
@@ -524,7 +655,7 @@ function renderTraf(){
     const eT=trSum(days,'gl','eTcr'), e3=trSum(days,'gl','eTc3');
     body+=`<div class="tr-hero ${trC(vg)}"><span>EVP global au ${trDay(last)}</span><b>${trF(g1)}</b><div>2025 : ${trF(g0)} EVP</div><strong>${trP(vg)} · ${g1-g0>0?'+':g1-g0<0?'−':''}${trF(Math.abs(g1-g0))} EVP</strong></div>`;
     body+=`<div class="tr-kpi">${kp('Import (EVP)',trSum(days,'imp','e'),trSum(days,'imp','e0'))}${kp('Export plein (EVP)',trSum(days,'expP','e'),trSum(days,'expP','e0'))}${kp('Export vide (EVP)',trSum(days,'expV','e'),trSum(days,'expV','e0'))}${kp('Boîtes (global)',trSum(days,'gl','b'),trSum(days,'gl','b0'))}${kp('EVP par jour',g1/nj,g0/nj)}${kp('Boîtes par jour',trSum(days,'gl','b')/nj,trSum(days,'gl','b0')/nj)}</div>`;
-    body+=`<p class="m-note">Répartition 2026 des EVP : TCE (TCR dans le fichier) ${trF(eT)} · TC3 ${trF(e3)} (le fichier ne donne pas 2025 par terminal).</p>`;
+    body+=`<p class="m-note">Répartition 2026 des EVP : TCE (TCR dans le fichier) ${trF(eT)} · TC3 ${trF(e3)} (comparaison avec 2025 par terminal : voir le bilan mensuel ci-dessus).</p>`;
     body+=`<section class="m-box"><b class="tr-h">Cumul EVP : 2026 (trait plein) contre 2025 (pointillé)</b>${trLine(days)}</section>`;
     body+=`<section class="m-box"><b class="tr-h">Jour par jour (EVP global)</b><table class="tr-t"><thead><tr><th>Jour</th><th>2026</th><th>2025</th><th>Écart</th></tr></thead><tbody>${days.slice().reverse().map(d=>{ const p=trPct(d.gl.e,d.gl.e0); return `<tr><td>${trDay(d.d)}</td><td>${trF(d.gl.e)}</td><td>${trF(d.gl.e0)}</td><td class="tr-v ${trC(p)}">${trP(p)}</td></tr>`; }).join('')}</tbody></table></section>`;
     if(years.length&&T.length>1){ body+=`<section class="m-box"><b class="tr-h">Mois reçus</b><table class="tr-t"><thead><tr><th>Mois</th><th>EVP 2026</th><th>EVP N-1</th><th>Écart</th></tr></thead><tbody>${T.map(x=>{ const a=trSum(x.days,'gl','e'), b=trSum(x.days,'gl','e0'), p=trPct(a,b); return `<tr><td>${trMois(x.ym)}</td><td>${trF(a)}</td><td>${trF(b)}</td><td class="tr-v ${trC(p)}">${trP(p)}</td></tr>`; }).join('')}</tbody></table></section>`; }
@@ -544,7 +675,7 @@ function renderTraf(){
     body+=`<section class="m-box"><b class="tr-h">Navires du mois (par mouvements)</b><table class="tr-t"><thead><tr><th>Navire</th><th>Term.</th><th>Mvts</th><th>Rendt</th><th>Arrêts</th></tr></thead><tbody>${top.map(o=>{ const r=o.h?o.mv/o.h:null; return `<tr><td>${esc(o.v)}</td><td>${o.t}</td><td>${trF(o.mv)}</td><td class="tr-v ${cl(r)}">${r==null?'—':r.toFixed(1).replace('.',',')}</td><td>${trF(o.ar)}</td></tr>`; }).join('')}</tbody></table></section>`;
     body+=`<p class="m-note">Le rapport de performance compte des mouvements de portique (par shift et par navire) ; le rapport de trafic compte des boîtes et des EVP par jour. Les deux bases sont différentes : ne pas les comparer entre elles.</p>`;
   }
-  app.innerHTML=mTop('Trafic · comparaison avec 2025',sub,false,true)+`<div class="m-body">${imp}${opts.length?`<div class="m-date"><select id="trSel" aria-label="Période">${opts.map(o=>`<option value="${o[0]}" ${o[0]===trSel?'selected':''}>${o[1]}</option>`).join('')}</select></div>`:''}${body}</div>`;
+  app.innerHTML=mTop('Trafic · comparaison avec 2025',sub,false,true)+`<div class="m-body">${imp}${BL}${opts.length&&BL?'<h3 class="m-h">Suivi quotidien (rapport « Trafic Quotidien »)</h3>':''}${opts.length?`<div class="m-date"><select id="trSel" aria-label="Période">${opts.map(o=>`<option value="${o[0]}" ${o[0]===trSel?'selected':''}>${o[1]}</option>`).join('')}</select></div>`:''}${body}</div>`;
   bind();
 }
 
@@ -727,7 +858,8 @@ async function saveSituation(x){
 async function importFiles(files){
   let ok=0; for(const f of files){
     try{ const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
-      if(isPerfWb(wb)){ if(await saveMonthly(parsePerf(wb,n=>gridRows(wb.Sheets[n])))) ok++; }
+      if(isBilanWb(wb)){ if(await saveMonthly(parseBilan(wb,n=>gridRows(wb.Sheets[n])))) ok++; }
+      else if(isPerfWb(wb)){ if(await saveMonthly(parsePerf(wb,n=>gridRows(wb.Sheets[n])))) ok++; }
       else if(isTraficRows(gridRows(wb.Sheets[wb.SheetNames[0]]))){ if(await saveMonthly(parseTrafic(gridRows(wb.Sheets[wb.SheetNames[0]])))) ok++; }
       else if(isSitWb(wb)){ if(await saveSituation(parseSituation(wb))) ok++; }
       else if(isDriverWb(wb)){ if(await saveDrivers(parseDrivers(wb))) ok++; }
@@ -892,7 +1024,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.30';
+const APP_V='7.31';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
@@ -1188,7 +1320,7 @@ function mTop(title,sub,back,noChip){
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
 async function hardReload(){ toast('Rechargement…'); try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){} location.reload(); }
-function tselBind(){ document.querySelectorAll('#app [data-tsel]').forEach(b=>b.onclick=()=>{ const [k,t]=b.dataset.tsel.split(':'); if(k==='dir') setDirTerm(t); else setTerm(t); }); }
+function tselBind(){ document.querySelectorAll('#app [data-tsel]').forEach(b=>b.onclick=()=>{ const [k,t]=b.dataset.tsel.split(':'); if(k==='dir') setDirTerm(t); else if(k==='traf') setTrTerm(t); else setTerm(t); }); }
 function mBind(){ tselBind();
   document.querySelectorAll('#app [data-m]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.m, v=b.dataset.v;
