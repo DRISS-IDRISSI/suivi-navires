@@ -223,3 +223,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
+
+## v7.28 — Trafic et comparaison avec l'an dernier
+- Nouvel écran **Trafic** (menu ☰ > « Trafic · comparaison 2025 ») : à partir du rapport « Suivi Trafic Quotidien » (EVP et boîtes, import / export plein / export vide, global TCE-TC3) il affiche le cumul du mois contre le même nombre de jours de 2025, l'écart en % et en EVP, la courbe cumulée et le tableau jour par jour. Le cumul de l'année s'affiche dès que plusieurs mois sont reçus.
+- Partie **Performance d'exploitation** à partir du « Rapport Journalier de Performance Opérationnelle » (un onglet par jour) : mouvements et rendement portique par terminal, arrêts, rendement du jour (couleurs selon l'objectif GMPH), classement des navires du mois.
+- Fonction Edge `ingest-report` v7 et `mailbox` v7 (noms de fichiers `Rapport_Trafic_Quotidien…` et `Rapport_Journalier_de_Performance…`). Table `monthly` : exécuter `SUPABASE_table_monthly.sql`.
+- Import manuel possible depuis l'écran Trafic (un ou deux fichiers à la fois).

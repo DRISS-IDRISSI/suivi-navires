@@ -218,6 +218,12 @@ body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 .mdl-b{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}.pwd{font-size:22px;letter-spacing:.06em;background:var(--surface-2);padding:10px;border-radius:4px;text-align:center;user-select:all}
 .acc-f{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;align-items:start}.acc-f input[type=email],.acc-f input[type=text]{width:100%;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:8px 10px;min-height:38px}
 .acc-f select{width:100%}.ck{white-space:nowrap;margin-right:6px}.acts button{font-size:12px;padding:5px 8px;min-height:30px}
+.tr-hero{border:2px solid var(--nv);border-radius:18px;padding:14px;text-align:center;background:#fff;margin:6px 0 10px}.tr-hero span{display:block;font-size:13px;color:#5b6f8f}.tr-hero b{display:block;font-size:40px;font-family:var(--f-display);color:#1f3a6e;line-height:1.1}.tr-hero div{font-size:14px;color:#5b6f8f}.tr-hero strong{display:block;margin-top:4px;font-size:20px}.tr-hero.g strong{color:#12805c}.tr-hero.c strong{color:#b3261e}
+.tr-kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px}.tr-k{background:var(--bg2);border-radius:12px;padding:8px 10px;text-align:center}.tr-k span{display:block;font-size:12px;color:#5b6f8f}.tr-k b{display:block;font-size:22px;font-family:var(--f-display);color:#1f3a6e}.tr-k small{display:block;font-size:12px;color:#6b7c93}.tr-k em{font-style:normal;font-weight:700;font-size:14px}
+.tr-k em.g,.tr-v.g{color:#12805c}.tr-k em.c,.tr-v.c{color:#b3261e}.tr-k em.w,.tr-v.w{color:#a86a00}.tr-v{font-weight:700}
+.tr-h{display:block;margin-bottom:6px;color:#1f3a6e}.tr-svg{width:100%;height:auto;display:block}
+.tr-t{width:100%;border-collapse:collapse;font-size:13px}.tr-t th{font-weight:600;color:#5b6f8f;text-align:right;padding:4px 4px;border-bottom:1px solid #d6dce1}.tr-t td{text-align:right;padding:5px 4px;border-bottom:1px solid #eef1f4}.tr-t th:first-child,.tr-t td:first-child{text-align:left}
+#trSel{width:100%;padding:10px;font-size:16px;border:1px solid #cfd9e3;border-radius:12px;background:#fff;color:#1f3a6e}
 </style></head><body>
 <div class="wrap">
 <header class="top"><div class="top-in">
@@ -343,6 +349,194 @@ function parseHourly(wb){
   const cranes=[]; for(let k=hr+1;k<R.length;k++){ const c=String(R[k][cC]??'').trim(); if(!c||/\s/.test(c)) break; cranes.push({id:c,moves:num(R[k][cM])??0,status:String(R[k][cS]??'').trim()}); }
   if(!cranes.length) throw new Error('Aucune grue dans le rapport horaire.');
   return {id:`${b.y}${p2(b.mo+1)}${p2(b.d)}${p2(b.h)}${p2(b.mi)}`,ts:casaToUtc(b.y,b.mo,b.d,b.h,b.mi),from:`${p2(a.h)}:${p2(a.mi)}`,to:`${p2(b.h)}:${p2(b.mi)}`,min,total,load,disch,other,generated:gen.replace(/^Generated\s*/i,''),cranes};
+}
+
+/* ---------- parseurs des rapports mensuels (memes regles que la fonction ingest-report v7) ---------- */
+const serialToYmd = (s) => new Date(Math.round(s) * 864e5 + Date.UTC(1899, 11, 30)).toISOString().slice(0, 10);
+const nn = (v) => typeof v === "number" && isFinite(v) ? v : 0;
+const sTxt = (v) => String(v == null ? "" : v).replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+function isTraficRows(R) {
+  return R.slice(0, 8).some((l) => l.some((x) => /Suivi Trafic Quotidien/i.test(String(x))));
+}
+function parseTrafic(R) {
+  const hr = R.findIndex((l) => sTxt(l[3]) === "Jour");
+  if (hr < 0) throw new Error("En-t\xEAte \xAB Jour \xBB introuvable (Suivi Trafic Quotidien).");
+  const H = R[hr].map((x) => sTxt(x));
+  const cI = H.indexOf("IMPORT"), cP = H.indexOf("EXPORT (P)"), cV = H.indexOf("EXPORT (V)"), cG = H.indexOf("GLOBAL");
+  if (cI < 0 || cP < 0 || cV < 0 || cG < 0) throw new Error("Colonnes IMPORT / EXPORT (P) / EXPORT (V) / GLOBAL introuvables.");
+  const days = [];
+  for (let r = hr + 1; r < R.length; r++) {
+    const row = R[r], s = row[3];
+    if (typeof s !== "number" || s < 4e4) {
+      if (sTxt(s) === "Total") break;
+      continue;
+    }
+    if (typeof row[cI] !== "number") continue;
+    const g = (i) => nn(row[i]);
+    days.push({
+      d: serialToYmd(s),
+      imp: { b: g(cI), b0: g(cI + 1), e: g(cI + 3), e0: g(cI + 4) },
+      expP: { b: g(cP), b0: g(cP + 1), e: g(cP + 3), e0: g(cP + 4) },
+      expV: { b: g(cV), b0: g(cV + 1), e: g(cV + 3), e0: g(cV + 4) },
+      gl: { b: g(cG + 2), b0: g(cG + 3), e: g(cG + 7), e0: g(cG + 8), bTcr: g(cG), bTc3: g(cG + 1), eTcr: g(cG + 5), eTc3: g(cG + 6) }
+    });
+  }
+  if (!days.length) throw new Error("Aucun jour renseign\xE9 dans le rapport de trafic.");
+  const ym = days[0].d.slice(0, 7);
+  return { kind: "trafic", id: "trafic-" + ym, ym, last: days[days.length - 1].d, days };
+}
+function isPerfWb(wb) {
+  const n = wb.SheetNames || [];
+  return n.some((x) => /^R[ée]capitulatif des [ée]tats/i.test(x.trim())) || n.filter((x) => /^J\.\d{2}$/.test(x.trim())).length >= 5;
+}
+function parsePerfDay(R) {
+  const d0 = (R[4] || [])[21];
+  if (typeof d0 !== "number" || d0 < 4e4) return null;
+  const out = { d: serialToYmd(d0), TCE: { lines: [], sh: {}, tot: null }, TC3: { lines: [], sh: {}, tot: null }, sum: {} };
+  for (let r = 0; r < R.length; r++) {
+    const t = sTxt(R[r][4]);
+    if (t !== "TCE" && t !== "TC3" || sTxt(R[r][5]) !== "NAVIRE") continue;
+    const blk = out[t];
+    let sh = 0, vessel = "";
+    for (let k = r + 1; k < R.length; k++) {
+      const row = R[k], c5 = sTxt(row[5]), c4 = sTxt(row[4]);
+      if (c5 === "TOTAL" || c4 === "TOTAL") {
+        blk.tot = totRow(row);
+        break;
+      }
+      const m = c5.match(/^(\d+)e Sh/i);
+      if (m) sh = +m[1];
+      if (/^TOT\s/i.test(c5)) {
+        const n = parseInt(c5.replace(/\D/g, ""), 10) || sh;
+        blk.sh[n] = totRow(row);
+        continue;
+      }
+      const v = sTxt(row[6]);
+      if (v) vessel = v;
+      if (typeof row[15] !== "number" || !vessel) continue;
+      blk.lines.push({
+        s: sh,
+        v: vessel,
+        bi: nn(row[7]),
+        be: nn(row[8]),
+        hg: nn(row[9]),
+        dri: nn(row[10]),
+        dre: nn(row[11]),
+        px: nn(row[12]),
+        hbe: nn(row[13]),
+        hbn: nn(row[14]),
+        mv: nn(row[15]),
+        rq: nn(row[16]),
+        rn: nn(row[17]),
+        eq: nn(row[18]),
+        ar: nn(row[19]),
+        m: sTxt(row[20]),
+        o: sTxt(row[21])
+      });
+    }
+  }
+  for (let r = 0; r < R.length; r++) {
+    const k = sTxt(R[r][4]);
+    if (["IMP", "EXP", "GL", "EQ", "RDT"].includes(k) && typeof R[r][6] === "number") out.sum[k] = R[r][6];
+  }
+  if (!out.TCE.lines.length && !out.TC3.lines.length) return null;
+  return out;
+}
+function totRow(row) {
+  return { bi: nn(row[7]), be: nn(row[8]), hbe: nn(row[13]), hbn: nn(row[14]), mv: nn(row[15]), rq: nn(row[16]), rn: nn(row[17]), eq: nn(row[18]), ar: nn(row[19]) };
+}
+function parsePerf(wb, sheetRows) {
+  const names = (wb.SheetNames || []).filter((n) => /^J\.\d{2}$/.test(n.trim()));
+  const days = [];
+  for (const n of names) {
+    const d = parsePerfDay(sheetRows(n));
+    if (d) days.push(d);
+  }
+  if (!days.length) throw new Error("Aucune journ\xE9e renseign\xE9e dans le rapport de performance.");
+  days.sort((a, b) => a.d.localeCompare(b.d));
+  const cnt = {};
+  days.forEach((d) => {
+    const m = d.d.slice(0, 7);
+    cnt[m] = (cnt[m] || 0) + 1;
+  });
+  const ym = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
+  const mdays = days.filter((d) => d.d.slice(0, 7) === ym);
+  return { kind: "perf", id: "perf-" + ym, ym, last: mdays[mdays.length - 1].d, days: mdays };
+}
+
+/* ---------- Trafic (comparaison N-1) et performance du mois : rapports mensuels (table monthly) ---------- */
+const gridRows=ws=>{ const e=XLSX.utils.decode_range(ws['!ref']||'A1').e; return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:'',range:{s:{r:0,c:0},e}}); };
+let mon={}, monLoaded=false, trSel=null;
+async function loadMonthly(){
+  const r=await sb.from('monthly').select('id,data'); let o={};
+  if(!r.error&&r.data) r.data.forEach(x=>{ o[x.id]=x.data; });
+  try{ const l=JSON.parse(localStorage.getItem('monthly')||'{}'); Object.keys(l).forEach(k=>{ if(!o[k]||(l[k].last||'')>(o[k].last||'')) o[k]=l[k]; }); }catch(e){}
+  mon=o; monLoaded=true;
+}
+async function saveMonthly(m){
+  const {error}=await sb.from('monthly').upsert({id:m.id,ts:new Date().toISOString(),data:m});
+  if(error){ try{ const l=JSON.parse(localStorage.getItem('monthly')||'{}'); l[m.id]=m; localStorage.setItem('monthly',JSON.stringify(l)); }catch(e){} toast('Table monthly absente : gardé sur cet appareil seulement ('+(error.message||'')+').'); }
+  await loadMonthly(); if(tab==='traf') render(); return true;
+}
+const TR_MOIS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const trMois=ym=>TR_MOIS[+ym.slice(5,7)-1]+' '+ym.slice(0,4);
+const trDay=d=>d.slice(8,10)+'/'+d.slice(5,7);
+const trPct=(a,b)=>b?(a-b)/b*100:null;
+const trF=n=>n==null?'—':Math.round(n).toLocaleString('fr-FR');
+const trP=p=>p==null?'—':(p>0?'+':p<0?'−':'')+Math.abs(p).toFixed(1).replace('.',',')+' %';
+const trC=p=>p==null?'':p>=0?'g':'c';
+function trSum(days,k,f){ return days.reduce((a,d)=>a+(d[k][f]||0),0); }
+function trLine(days){ /* courbe cumulee 2026 / 2025 en EVP */
+  const W=340,H=150,P=26; let c1=0,c0=0; const A=[],B=[]; days.forEach(d=>{ c1+=d.gl.e; c0+=d.gl.e0; A.push(c1); B.push(c0); });
+  const mx=Math.max(1,...A,...B), n=days.length, X=i=>P+(n<2?0:(W-P-8)*i/(n-1)), Y=v=>H-18-(H-34)*v/mx;
+  const pl=a=>a.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" class="tr-svg" role="img" aria-label="Cumul EVP 2026 et 2025"><line x1="${P}" y1="${H-18}" x2="${W-8}" y2="${H-18}" stroke="#cfd9e3"/>
+   <polyline points="${pl(B)}" fill="none" stroke="#9aa9bd" stroke-width="2" stroke-dasharray="5 4"/><polyline points="${pl(A)}" fill="none" stroke="#1f3a6e" stroke-width="3"/>
+   <text x="${P}" y="${H-4}" font-size="10" fill="#6b7c93">${trDay(days[0].d)}</text><text x="${W-8}" y="${H-4}" font-size="10" text-anchor="end" fill="#6b7c93">${trDay(days[n-1].d)}</text>
+   <text x="${P}" y="11" font-size="10" fill="#6b7c93">${trF(mx)} EVP</text></svg>`;
+}
+function renderTraf(){
+  const app=$('#app'); document.body.classList.add('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
+  if(!monLoaded){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Chargement…',false,true)+'<div class="m-body"><div class="empty"><b>Chargement…</b></div></div>'; mBind(); loadMonthly().then(()=>render()).catch(()=>{ monLoaded=true; render(); }); return; }
+  const imp=canImp()?`<div class="m-date"><label class="m-up">Importer un rapport (trafic ou performance, fichier Excel)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'';
+  const T=Object.values(mon).filter(x=>x&&x.kind==='trafic').sort((a,b)=>a.ym<b.ym?1:-1), Pm=Object.values(mon).filter(x=>x&&x.kind==='perf');
+  const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; render(); }; };
+  if(!T.length&&!Pm.length){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Aucun rapport reçu',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucun rapport de trafic</b>Les rapports « Suivi Trafic Quotidien » et « Rapport Journalier de Performance Opérationnelle » arrivent par e-mail (boîte de l'application) ou s'importent ici.</div></div>`; bind(); return; }
+  const years=[...new Set(T.map(x=>x.ym.slice(0,4)))];
+  const opts=[...T.map(x=>['M:'+x.ym,trMois(x.ym)]),...years.filter(y=>T.filter(x=>x.ym.slice(0,4)===y).length>1).map(y=>['Y:'+y,'Cumul '+y+' (mois reçus)'])];
+  if(!trSel||!opts.some(o=>o[0]===trSel)) trSel=opts.length?opts[0][0]:null;
+  let body='', sub='';
+  if(trSel){
+    const isY=trSel[0]==='Y', key=trSel.slice(2), L=isY?T.filter(x=>x.ym.slice(0,4)===key):T.filter(x=>x.ym===key);
+    const days=L.slice().sort((a,b)=>a.ym<b.ym?-1:1).flatMap(x=>x.days), last=days[days.length-1].d;
+    const g1=trSum(days,'gl','e'), g0=trSum(days,'gl','e0'), vg=trPct(g1,g0), nj=days.length;
+    sub=(isY?'Cumul '+key:trMois(key))+' · au '+trDay(last)+' · '+nj+' jour'+(nj>1?'s':'')+' · comparé au même nombre de jours de 2025';
+    const kp=(t,a,b)=>{ const p=trPct(a,b); return `<div class="tr-k"><span>${t}</span><b>${trF(a)}</b><small>2025 : ${trF(b)}</small><em class="${trC(p)}">${trP(p)}</em></div>`; };
+    const eT=trSum(days,'gl','eTcr'), e3=trSum(days,'gl','eTc3');
+    body+=`<div class="tr-hero ${trC(vg)}"><span>EVP global au ${trDay(last)}</span><b>${trF(g1)}</b><div>2025 : ${trF(g0)} EVP</div><strong>${trP(vg)} · ${g1-g0>0?'+':g1-g0<0?'−':''}${trF(Math.abs(g1-g0))} EVP</strong></div>`;
+    body+=`<div class="tr-kpi">${kp('Import (EVP)',trSum(days,'imp','e'),trSum(days,'imp','e0'))}${kp('Export plein (EVP)',trSum(days,'expP','e'),trSum(days,'expP','e0'))}${kp('Export vide (EVP)',trSum(days,'expV','e'),trSum(days,'expV','e0'))}${kp('Boîtes (global)',trSum(days,'gl','b'),trSum(days,'gl','b0'))}${kp('EVP par jour',g1/nj,g0/nj)}${kp('Boîtes par jour',trSum(days,'gl','b')/nj,trSum(days,'gl','b0')/nj)}</div>`;
+    body+=`<p class="m-note">Répartition 2026 des EVP : TCE (TCR dans le fichier) ${trF(eT)} · TC3 ${trF(e3)} (le fichier ne donne pas 2025 par terminal).</p>`;
+    body+=`<section class="m-box"><b class="tr-h">Cumul EVP : 2026 (trait plein) contre 2025 (pointillé)</b>${trLine(days)}</section>`;
+    body+=`<section class="m-box"><b class="tr-h">Jour par jour (EVP global)</b><table class="tr-t"><thead><tr><th>Jour</th><th>2026</th><th>2025</th><th>Écart</th></tr></thead><tbody>${days.slice().reverse().map(d=>{ const p=trPct(d.gl.e,d.gl.e0); return `<tr><td>${trDay(d.d)}</td><td>${trF(d.gl.e)}</td><td>${trF(d.gl.e0)}</td><td class="tr-v ${trC(p)}">${trP(p)}</td></tr>`; }).join('')}</tbody></table></section>`;
+    if(years.length&&T.length>1){ body+=`<section class="m-box"><b class="tr-h">Mois reçus</b><table class="tr-t"><thead><tr><th>Mois</th><th>EVP 2026</th><th>EVP N-1</th><th>Écart</th></tr></thead><tbody>${T.map(x=>{ const a=trSum(x.days,'gl','e'), b=trSum(x.days,'gl','e0'), p=trPct(a,b); return `<tr><td>${trMois(x.ym)}</td><td>${trF(a)}</td><td>${trF(b)}</td><td class="tr-v ${trC(p)}">${trP(p)}</td></tr>`; }).join('')}</tbody></table></section>`; }
+  }
+  /* performance d'exploitation du mois (rapport journalier) */
+  const ymP=trSel&&trSel[0]==='M'?trSel.slice(2):(Pm.sort((a,b)=>a.ym<b.ym?1:-1)[0]||{}).ym, P=Pm.find(x=>x.ym===ymP);
+  if(P){
+    const obj=GT||24, cl=n=>n==null?'':n>=obj?'g':n>=LO()?'w':'c';
+    const agg=(T3)=>{ let mv=0,h=0,ar=0,bi=0,be=0; P.days.forEach(d=>{ const t=d[T3].tot; if(t){ mv+=t.mv; h+=t.hbe; ar+=t.ar; bi+=t.bi; be+=t.be; } }); return {mv,h,ar,bi,be,r:h?mv/h:null}; };
+    const aE=agg('TCE'), a3=agg('TC3'), all=(aE.mv+a3.mv)/((aE.h+a3.h)||1);
+    body+=`<h3 class="m-h">Performance d'exploitation · ${trMois(P.ym)} (jusqu'au ${trDay(P.last)})</h3>`;
+    body+=`<div class="tr-kpi"><div class="tr-k"><span>Mouvements TCE</span><b>${trF(aE.mv)}</b><small>rendement portique</small><em class="${cl(aE.r)}">${aE.r==null?'—':aE.r.toFixed(1).replace('.',',')}</em></div><div class="tr-k"><span>Mouvements TC3</span><b>${trF(a3.mv)}</b><small>rendement portique</small><em class="${cl(a3.r)}">${a3.r==null?'—':a3.r.toFixed(1).replace('.',',')}</em></div><div class="tr-k"><span>Rendement global</span><b class="tr-v ${cl(all)}">${all.toFixed(1).replace('.',',')}</b><small>objectif ${obj}</small><em></em></div><div class="tr-k"><span>Arrêts TCE (min)</span><b>${trF(aE.ar)}</b><small>boîtes imp./exp.</small><em>${trF(aE.bi)} / ${trF(aE.be)}</em></div><div class="tr-k"><span>Arrêts TC3 (min)</span><b>${trF(a3.ar)}</b><small>boîtes imp./exp.</small><em>${trF(a3.bi)} / ${trF(a3.be)}</em></div><div class="tr-k"><span>Boîtes manutentionnées</span><b>${trF(aE.bi+aE.be+a3.bi+a3.be)}</b><small>import ${trF(aE.bi+a3.bi)}</small><em>export ${trF(aE.be+a3.be)}</em></div></div>`;
+    const rows=P.days.slice().reverse().map(d=>{ const e=d.TCE.tot||{mv:0,hbe:0,ar:0}, t=d.TC3.tot||{mv:0,hbe:0,ar:0}, r=(e.hbe+t.hbe)?(e.mv+t.mv)/(e.hbe+t.hbe):null; return `<tr><td>${trDay(d.d)}</td><td>${trF(e.mv)}</td><td>${trF(t.mv)}</td><td class="tr-v ${cl(r)}">${r==null?'—':r.toFixed(1).replace('.',',')}</td><td>${trF(e.ar+t.ar)}</td></tr>`; }).join('');
+    body+=`<section class="m-box"><b class="tr-h">Jour par jour</b><table class="tr-t"><thead><tr><th>Jour</th><th>Mvts TCE</th><th>Mvts TC3</th><th>Rendt</th><th>Arrêts min</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+    const V={}; ['TCE','TC3'].forEach(T3=>P.days.forEach(d=>d[T3].lines.forEach(l=>{ const k=T3+'|'+l.v; const o=V[k]||(V[k]={t:T3,v:l.v,mv:0,h:0,ar:0,j:new Set()}); o.mv+=l.mv; o.h+=l.hbe; o.ar+=l.ar; o.j.add(d.d); })));
+    const top=Object.values(V).sort((a,b)=>b.mv-a.mv).slice(0,12);
+    body+=`<section class="m-box"><b class="tr-h">Navires du mois (par mouvements)</b><table class="tr-t"><thead><tr><th>Navire</th><th>Term.</th><th>Mvts</th><th>Rendt</th><th>Arrêts</th></tr></thead><tbody>${top.map(o=>{ const r=o.h?o.mv/o.h:null; return `<tr><td>${esc(o.v)}</td><td>${o.t}</td><td>${trF(o.mv)}</td><td class="tr-v ${cl(r)}">${r==null?'—':r.toFixed(1).replace('.',',')}</td><td>${trF(o.ar)}</td></tr>`; }).join('')}</tbody></table></section>`;
+    body+=`<p class="m-note">Le rapport de performance compte des mouvements de portique (par shift et par navire) ; le rapport de trafic compte des boîtes et des EVP par jour. Les deux bases sont différentes : ne pas les comparer entre elles.</p>`;
+  }
+  app.innerHTML=mTop('Trafic · comparaison avec 2025',sub,false,true)+`<div class="m-body">${imp}${opts.length?`<div class="m-date"><select id="trSel" aria-label="Période">${opts.map(o=>`<option value="${o[0]}" ${o[0]===trSel?'selected':''}>${o[1]}</option>`).join('')}</select></div>`:''}${body}</div>`;
+  bind();
 }
 
 /* rapport horaire RTG (REP_RTG_MOVES_HOURLY) : deux blocs RTG01-07 / RTG08-14 cote a cote (memes regles que ingest-report) */
@@ -513,7 +707,9 @@ async function saveSituation(x){
 async function importFiles(files){
   let ok=0; for(const f of files){
     try{ const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
-      if(isSitWb(wb)){ if(await saveSituation(parseSituation(wb))) ok++; }
+      if(isPerfWb(wb)){ if(await saveMonthly(parsePerf(wb,n=>gridRows(wb.Sheets[n])))) ok++; }
+      else if(isTraficRows(gridRows(wb.Sheets[wb.SheetNames[0]]))){ if(await saveMonthly(parseTrafic(gridRows(wb.Sheets[wb.SheetNames[0]])))) ok++; }
+      else if(isSitWb(wb)){ if(await saveSituation(parseSituation(wb))) ok++; }
       else if(isDriverWb(wb)){ if(await saveDrivers(parseDrivers(wb))) ok++; }
       else if(isRtgWb(wb)){ if(await saveRtg(parseRtg(wb))) ok++; }
       else if(isHourlyWb(wb)){ if(await saveHourly(parseHourly(wb))) ok++; }
@@ -676,7 +872,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.27';
+const APP_V='7.28';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
@@ -968,7 +1164,7 @@ const IC={
 function mTop(title,sub,back,noChip){
   return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
     <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div>${noChip?'<span style="width:44px"></span>':`<button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TC3':termSel()}${myTerms().length>1?' ⇄':''}</button>`}</div>
-  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab!=='pilot'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':''}${tab!=='dir'?'<button type="button" data-m="dir">Direction</button>':''}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="prev">Prévisions (situation 8 h)</button><button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
+  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab!=='pilot'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':''}${tab!=='dir'?'<button type="button" data-m="dir">Direction</button>':''}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="prev">Prévisions (situation 8 h)</button><button type="button" data-m="traf">Trafic · comparaison 2025</button><button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
 async function hardReload(){ toast('Rechargement…'); try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){} location.reload(); }
@@ -980,10 +1176,10 @@ function mBind(){
     if(a==='shgo'){ const d=$('#mShDate').value; if(d) mShDate=d; mShCodes=[...document.querySelectorAll('.m-shc:checked')].map(x=>x.value); if(!mShCodes.length) mShCodes=['S1']; render(); return; }
     if(a==='term'){ if(myTerms().length>1) setTerm(termSel()==='TC3'?'TCE':'TC3'); return; }
     if(a==='back'){ if(history.state&&history.state.m) history.back(); else { mScr='list'; render(); } return; }
-    if(a==='ref'){ lastSig=''; loadSnaps(); toast('Actualisation…'); return; }
+    if(a==='ref'){ lastSig=''; monLoaded=false; if(tab==='traf') render(); loadSnaps(); toast('Actualisation…'); return; }
     if(a==='pwd'){ pwdModal(); return; }
     if(a==='reset'){ hardReload(); return; }
-    if(a==='drv'||a==='ana'||a==='acc'||a==='dir'||a==='prev'){ tab=a; if(a==='dir'){ try{ history.replaceState(null,'','#direction'); }catch(e){} } render(); window.scrollTo(0,0); return; }
+    if(a==='drv'||a==='ana'||a==='acc'||a==='dir'||a==='prev'||a==='traf'){ tab=a; if(a==='dir'){ try{ history.replaceState(null,'','#direction'); }catch(e){} } render(); window.scrollTo(0,0); return; }
     if(a==='pilot'){ tab='pilot'; mScr='list'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} render(); window.scrollTo(0,0); return; }
     if(a==='full'){ try{ localStorage.setItem('fullView','1'); }catch(e){} if(tab==='dir'){ tab='pilot'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} } render(); return; }
     if(a==='out'){ sb.auth.signOut(); return; }
@@ -1156,8 +1352,8 @@ function render(){
     $('#app').innerHTML=meState==='load'?'<div class="empty"><b>Chargement…</b></div>':`<div class="empty"><b>Compte non autorisé</b>Votre compte (${esc(idOf(session.user.email))}) n'est pas activé ou a été désactivé. Contactez l'administrateur de l'application.</div>`; return; }
   $('#btnImport').hidden=!on||!canImp(); $('#btnPwd').hidden=!on; $('#drop').hidden=!on||!canImp()||(tab!=='ana'&&tab!=='drv');
   if(!on){ showLogin(); return; }
-  { const T=[['dir','Direction'],['pilot','Pilotage'],['prev','Prévisions']]; if(canDrv()) T.push(['drv','Conducteurs']); T.push(['ana','Analyse']); if(isAdmin()) T.push(['acc','Comptes']);
-    if(!T.some(x=>x[0]===tab)) tab='pilot'; document.body.classList.toggle('dirmode',tab==='dir'); if(tab!=='dir'&&tab!=='prev'){ document.body.classList.remove('mobpilot'); document.body.classList.remove('dirwide'); } $('#tabs').innerHTML=T.map(x=>`<button type="button" data-tab="${x[0]}">${x[1]}</button>`).join(''); }
+  { const T=[['dir','Direction'],['pilot','Pilotage'],['prev','Prévisions'],['traf','Trafic']]; if(canDrv()) T.push(['drv','Conducteurs']); T.push(['ana','Analyse']); if(isAdmin()) T.push(['acc','Comptes']);
+    if(!T.some(x=>x[0]===tab)) tab='pilot'; document.body.classList.toggle('dirmode',tab==='dir'); if(tab!=='dir'&&tab!=='prev'&&tab!=='traf'){ document.body.classList.remove('mobpilot'); document.body.classList.remove('dirwide'); } $('#tabs').innerHTML=T.map(x=>`<button type="button" data-tab="${x[0]}">${x[1]}</button>`).join(''); }
   document.querySelectorAll('#tabs [data-tab]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.tab===tab); b.onclick=()=>{tab=b.dataset.tab;try{ history.replaceState(null,'',tab==='dir'?'#direction':location.pathname+location.search); }catch(e){} render();window.scrollTo(0,0);}; });
   const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
   if(tab!=='acc') accLoaded=false;
@@ -1165,6 +1361,7 @@ function render(){
   if(tab==='drv'){ renderDrv(); return; }
   if(tab==='dir'){ renderDir(); return; }
   if(tab==='prev'){ renderPrev(); return; }
+  if(tab==='traf'){ renderTraf(); return; }
   liveCalc(); document.body.classList.remove('mobpilot'); { const sg=$('#termSeg'); sg.hidden=!(session&&me&&myTerms().length>1&&(tab==='pilot'||tab==='drv')); sg.querySelectorAll('[data-t]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.t===termSel()); b.onclick=()=>setTerm(b.dataset.t); }); } $('#btnMob').hidden=!fullView();
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
