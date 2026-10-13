@@ -237,7 +237,7 @@ body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 <div class="seg" id="termSeg" role="group" aria-label="Terminal" hidden><button type="button" data-t="TCE">TCE</button><button type="button" data-t="TC3">TC3</button><button type="button" data-t="ALL">Tous</button></div>
 <nav class="tabs" id="tabs" aria-label="Rubriques"><button type="button" data-tab="pilot">Pilotage</button><button type="button" data-tab="drv">Conducteurs</button><button type="button" data-tab="ana">Analyse</button></nav></header>
 
-<div class="drop" id="drop">Import manuel (secours) : glissez ici le rapport horaire (REP_QUAY_CRANE_DELAYS&hellip;) ou le rapport de fin de shift (REP_MM_END_SHIFT&hellip;). En fonctionnement normal, les rapports arrivent seuls depuis la bo&icirc;te mail.</div>
+<div class="drop" id="drop">Import manuel (secours) : glissez ici le rapport horaire (REP_QUAY_CRANE_DELAYS&hellip; ou REP_CRANE_DELAYS_WITH_SQL&hellip;) ou le rapport de fin de shift (REP_MM_END_SHIFT&hellip;). En fonctionnement normal, les rapports arrivent seuls depuis la bo&icirc;te mail.</div>
 <div id="app"></div>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -304,9 +304,27 @@ function casaToUtc(y,mo,d,h,mi){
   const f=new Intl.DateTimeFormat('en-US',{timeZone:TZ,hourCycle:'h23',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric'});
   const off=t=>{const p=f.formatToParts(new Date(t)),v=k=>+p.find(x=>x.type===k).value;return Date.UTC(v('year'),v('month')-1,v('day'),v('hour'),v('minute'))-t;};
   const g=Date.UTC(y,mo,d,h,mi); let t=g-off(g); t=g-off(t); return t; }
-function isHourlyWb(wb){ return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}).some(l=>l.some(x=>/Hourly Quay-Crane/i.test(String(x)))); }
+const isHourlySqlR=R=>R.some(l=>l.some(x=>String(x).trim()==='WINDOW_START')&&l.some(x=>String(x).trim()==='CRANE_ID'));
+function isHourlyWb(wb){ const R=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}); return isHourlySqlR(R)||R.some(l=>l.some(x=>/Hourly Quay-Crane/i.test(String(x)))); }
+/* nouveau format REP_CRANE_DELAYS_WITH_SQL : tableau plat avec navire (VISIT_ID, VESSEL_NAME) par portique (memes regles que ingest-report v6) */
+function parseHourlySql(R){
+  const hr=R.findIndex(l=>l.some(x=>String(x).trim()==='WINDOW_START')&&l.some(x=>String(x).trim()==='CRANE_ID'));
+  const H=R[hr].map(x=>String(x).trim()), col=n=>H.indexOf(n), cWs=col('WINDOW_START'),cWe=col('WINDOW_END'),cVi=col('VISIT_ID'),cVn=col('VESSEL_NAME'),cCr=col('CRANE_ID'),cMv=col('MOVES'),cIm=col('IMPORT_DISCHARGE'),cEx=col('EXPORT_LOAD'),cSt=col('STATUS'),cMin=col('MIN_REQUIRED');
+  const dateOf=x=>{ if(typeof x==='number'){ const d=new Date(Math.round((x-25569)*1440)*60000); return {y:d.getUTCFullYear(),mo:d.getUTCMonth(),d:d.getUTCDate(),h:d.getUTCHours(),mi:d.getUTCMinutes()}; }
+    let m=String(x).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); if(m) return {y:+m[1],mo:+m[2]-1,d:+m[3],h:+m[4],mi:+m[5]};
+    m=String(x).match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/); if(m) return {y:+m[3],mo:+m[2]-1,d:+m[1],h:+m[4],mi:+m[5]};
+    throw new Error('Fenêtre horaire introuvable.'); };
+  const rows=R.slice(hr+1).filter(r=>String(r[cCr]??'').trim()&&!/\s/.test(String(r[cCr]).trim())); if(!rows.length) throw new Error('Aucune grue dans le rapport horaire.');
+  const a=dateOf(rows[0][cWs]), b=dateOf(rows[0][cWe]), p2=x=>String(x).padStart(2,'0'), by=new Map(); let total=0,load=0,disch=0,min=20;
+  rows.forEach(r=>{ const id=String(r[cCr]).trim(), mv=num(r[cMv])??0, imp=num(r[cIm])??0, exp=num(r[cEx])??0, visit=String(r[cVi]??'').trim().replace(/\.0+$/,''), vessel=String(r[cVn]??'').trim().toUpperCase(), mr=cMin>=0?num(r[cMin]):null; if(mr) min=mr;
+    total+=mv; load+=exp; disch+=imp; const c=by.get(id)||{id,moves:0,imp:0,exp:0,status:'',visit:'',vessel:'',best:-1};
+    c.moves+=mv; c.imp+=imp; c.exp+=exp; if(!c.status) c.status=String(r[cSt]??'').trim(); if(visit&&mv>=c.best){ c.best=mv; c.visit=visit; c.vessel=vessel; } by.set(id,c); });
+  const cranes=[...by.values()].map(c=>{ const {best,...o}=c; return o; });
+  return {id:`${b.y}${p2(b.mo+1)}${p2(b.d)}${p2(b.h)}${p2(b.mi)}`,ts:casaToUtc(b.y,b.mo,b.d,b.h,b.mi),from:`${p2(a.h)}:${p2(a.mi)}`,to:`${p2(b.h)}:${p2(b.mi)}`,min,total,load,disch,other:0,generated:'',cranes};
+}
 function parseHourly(wb){
   const R=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''});
+  if(isHourlySqlR(R)) return parseHourlySql(R);
   let wr=-1,hr=-1,tr=-1,gen='';
   R.forEach((r,i)=>{ const L=r.map(x=>String(x).trim());
     if(wr<0&&L.some(x=>/^Rolling window/i.test(x))) wr=i;
@@ -1106,7 +1124,7 @@ function renderPrev(){
   const app=$('#app'); document.body.classList.add('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
   const dayK=ts=>new Date(ts).toLocaleDateString('en-CA',{timeZone:TZ}), hhmm=ts=>new Date(ts).toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit'});
   const ddmm=ts=>new Date(ts).toLocaleDateString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit'});
-  const imp=canImp()?`<div class="m-date"><label class="m-up">Importer la situation du jour (fichier Excel)<input type="file" id="sitFile" accept=".xlsx,.xls" hidden></label></div>`:'';
+  const imp=canImp()?`<div class="m-date"><label class="m-up">Importer un fichier Excel (situation du jour ou rapport horaire)<input type="file" id="sitFile" accept=".xlsx,.xls" multiple hidden></label></div>`:'';
   if(!sit){ app.innerHTML=mTop('Prévisions & situation','Aucune situation reçue',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucune situation importée</b>Importez le fichier « Situation des navires » reçu chaque jour à 8 h : il alimente les postes à quai, les navires accostés et les arrivées prévues.</div></div>`; mBind(); bindSit(); return; }
   const V=sit.vessels, quai=V.filter(e=>e.status==='Accosté'&&!goneV(e.visit)).sort((a,b)=>(a.berth||0)-(b.berth||0)), prv=V.filter(e=>e.status==='Prévision').sort((a,b)=>(a.eta||0)-(b.eta||0)), dep=V.filter(e=>e.status==='Appareillé'||e.status==='Terminé'||(e.status==='Accosté'&&goneV(e.visit)));
   const live=Object.fromEntries(((lastSnap()||{}).vessels||[]).map(v=>[v.visit,v]));

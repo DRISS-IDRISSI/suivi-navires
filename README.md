@@ -217,3 +217,6 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 - Le nouveau fichier horaire `REP_CRANE_DELAYS_WITH_SQL` donne pour chaque portique le navire (VISIT_ID, VESSEL_NAME), les mouvements import/export et le minimum requis. Fonction Edge `ingest-report` v6 (lecture des deux formats) et `mailbox` v6 (nom de fichier accepté).
 - Direction et Pilotage > Portiques utilisent ce navire (prioritaire sur le rapport de shift et sur les corrections manuelles plus anciennes). Le poste est repris de la situation du jour ou du poste saisi pour l'escale.
 - Un portique sans navire dans le rapport (CHECK ASSIGN.) garde l'affectation du rapport de shift ; « - » en correction manuelle reste possible.
+
+## v7.26 — Import manuel du nouveau rapport horaire
+- L'import manuel (écran Prévisions > « Importer un fichier Excel », plusieurs fichiers possibles ; ou zone d'import de la version complète) lit aussi `REP_CRANE_DELAYS_WITH_SQL`. Sert à rattraper les heures manquantes si la boîte mail n'a pas pu les ingérer.
