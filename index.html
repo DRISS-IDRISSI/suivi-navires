@@ -676,6 +676,9 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
+const APP_V='7.27';
+const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
+  return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
 async function setCrane(id){
   const m=manFor(id), cur=m?m.vessel:'', v=prompt("Navire actuellement servi par "+id+" (ex. : MIMMI SCHULTE).\nTapez - si ce portique ne travaille sur aucun navire.\nLaisser vide pour revenir à l'information du rapport.",cur);
@@ -1113,7 +1116,7 @@ function renderDir(){
     <div class="m-date"><input type="date" id="dirDay" value="${day}" max="${maxDay}"></div>
      ${canImp()?`<div class="m-obj"><label for="dirGt">Objectif (mouvements par heure et par portique)</label><input type="number" id="dirGt" min="1" max="80" value="${GT}"></div>`:''}
     ${groups.filter(g=>g.ids.length).map(group).join('')||`<div class="empty"><b>Aucun portique en opération</b>${h?'Aucun mouvement sur le dernier rapport horaire ('+esc(h.from)+'–'+esc(h.to)+').':'Aucun rapport horaire reçu.'}</div>`}
-    <p class="m-note">Seuls les portiques en opération (au moins 1 mouvement sur le dernier rapport horaire) sont affichés. Vert : ${obj} mouvements par heure ou plus (objectif) · orange : entre ${LO()} et ${obj} · rouge : moins de ${LO()}. Les barres montrent les 12 dernières heures (heure de fin de fenêtre). Les shifts viennent des rapports de fin de shift ; le shift en cours est complété avec les rapports horaires. Actualisation automatique chaque minute.</p>${canImp()?'<p class="m-note">Navire ou poste erroné (portique changé de navire en cours de shift) : touchez la carte du portique pour le corriger. La correction reste valable jusqu\'au prochain rapport de fin de shift.</p>':''}</div>`;
+    <p class="m-note">Seuls les portiques en opération (au moins 1 mouvement sur le dernier rapport horaire) sont affichés. Vert : ${obj} mouvements par heure ou plus (objectif) · orange : entre ${LO()} et ${obj} · rouge : moins de ${LO()}. Les barres montrent les 12 dernières heures (heure de fin de fenêtre). Les shifts viennent des rapports de fin de shift ; le shift en cours est complété avec les rapports horaires. Actualisation automatique chaque minute.</p><p class="m-note" id="diag">${diagLine()}</p>${canImp()?'<p class="m-note">Navire ou poste erroné (portique changé de navire en cours de shift) : touchez la carte du portique pour le corriger. La correction reste valable jusqu\'au prochain rapport de fin de shift.</p>':''}</div>`;
   mBind();
   app.querySelectorAll('[data-cr]').forEach(e=>e.onclick=()=>setCrane(e.dataset.cr));
   const ds=$('#dirDay'); if(ds) ds.onchange=e=>{ dirDay=e.target.value||null; render(); };

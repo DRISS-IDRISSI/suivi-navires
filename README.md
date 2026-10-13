@@ -220,3 +220,6 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 
 ## v7.26 — Import manuel du nouveau rapport horaire
 - L'import manuel (écran Prévisions > « Importer un fichier Excel », plusieurs fichiers possibles ; ou zone d'import de la version complète) lit aussi `REP_CRANE_DELAYS_WITH_SQL`. Sert à rattraper les heures manquantes si la boîte mail n'a pas pu les ingérer.
+
+## v7.27 — Ligne de diagnostic
+- Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
