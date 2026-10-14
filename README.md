@@ -224,6 +224,19 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.38 — Rotation hebdomadaire et classement par équipe
+- Les équipes (groupes) tournent chaque semaine : S1 → S3 → S2 → S1. Chaque journée du rapport de performance est attribuée à l'équipe de service ce jour-là.
+- Rotation de départ (semaine du 12/10/2026) : S1 HADDAZI (TC3) + BAKKALI (TCE) ; S2 AZZAM + BAHOUS ; S3 HOUSSAM + EDDAOUDI. L'historique est calculé à rebours à partir de cette semaine.
+- Écran Trafic : « Classement des équipes » par terminal (rendement, mouvements, boîtes, jours travaillés) + équipes complètes TC3+TCE, carte « Rotation des équipes » (semaine en cours et suivante). Le classement des créneaux S1/S2/S3 est conservé.
+- Bouton « Modifier la rotation » (responsables/admin) : date de référence (lundi) + noms des 6 groupes ; enregistré en partage dans `escale_meta` (clé `CFG:ROT`), aucune nouvelle table.
+- Le PDF à partager contient les classements par équipe, la rotation en cours et les classements par créneau.
+
+## v7.37 — Classement mensuel des shifts + PDF à partager
+- Écran Trafic (responsables), sous « Performance d'exploitation » : « Classement des shifts » du mois, du meilleur au moins bon rendement, avec les mouvements et les boîtes traitées (import + export). Suit le sélecteur TCE | TC3 | TCE+TC3 ; pour TCE+TC3, détail terminal × shift en plus. Mois en cours signalé « provisoire » ; en fin de mois, résultat définitif.
+- Tableau « Mois précédents » (rendement S1 / S2 / S3 de chaque mois reçu et meilleur shift).
+- Bouton « Partager le classement en PDF (3 shifts) » : PDF d'une à deux pages (tous terminaux, TCE, TC3, classement général, mois précédents) ; sur téléphone ouvre le partage (WhatsApp, e-mail…), sur ordinateur télécharge le fichier.
+- Les shifts sont recalculés ligne par ligne : les totaux « TOT 1e/2e/3e » du fichier sont parfois mal étiquetés (ex. TC3 du 02/10).
+
 ## v7.36 — Rapport Trafic Quotidien : en-tête plus tolérant
 - Le fichier de septembre n'avait pas la cellule « Jour » dans l'en-tête et était refusé. L'en-tête est maintenant reconnu par les colonnes IMPORT / EXPORT (P) / EXPORT (V) / GLOBAL (application et ingest-report v10).
 

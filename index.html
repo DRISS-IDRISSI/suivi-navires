@@ -227,6 +227,7 @@ body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 .tr-h{display:block;margin-bottom:6px;color:#1f3a6e}.tr-svg{width:100%;height:auto;display:block}
 .tr-t{width:100%;border-collapse:collapse;font-size:13px}.tr-t th{font-weight:600;color:#5b6f8f;text-align:right;padding:4px 4px;border-bottom:1px solid #d6dce1}.tr-t td{text-align:right;padding:5px 4px;border-bottom:1px solid #eef1f4}.tr-t th:first-child,.tr-t td:first-child{text-align:left}
 tr.tr-tot td{border-top:2px solid #1f3a6e;background:#eef2f8}
+button.tr-btn{width:100%;padding:12px;border-radius:14px;font-size:16px}
 table.tr-ds th,table.tr-ds td{font-size:13px;padding-left:4px;padding-right:4px}
 #trSel{width:100%;padding:10px;font-size:16px;border:1px solid #cfd9e3;border-radius:12px;background:#fff;color:#1f3a6e}
 </style></head><body>
@@ -641,6 +642,94 @@ function renderBilan(b){
   h+=`<p class="m-note">Source : fichier « Situation du Trafic Conteneur ${y}/${y-1} »${asof?' au '+asof.slice(8,10)+'/'+asof.slice(5,7)+'/'+asof.slice(0,4):''}. Le total TCE + TC3 est celui du fichier ; EVP = équivalents vingt pieds.</p>`;
   return h;
 }
+/* ---------- rotation hebdomadaire des équipes : S1 → S3 → S2 → S1 ---------- */
+const ROT_DEFAULT={ref:'2026-10-12',TC3:{1:'HADDAZI',2:'AZZAM',3:'HOUSSAM'},TCE:{1:'BAKKALI',2:'BAHOUS',3:'EDDAOUDI'}};
+let ROT=ROT_DEFAULT;
+const ROT_CYC=[1,3,2];
+const ymdMs=y=>Date.UTC(+y.slice(0,4),+y.slice(5,7)-1,+y.slice(8,10));
+const rotWeek=ymd=>Math.floor((ymdMs(ymd)-ymdMs(ROT.ref))/(7*864e5));
+/* équipe (identifiée par son shift à la semaine de référence : 1, 2 ou 3) qui travaille au shift sh pendant la semaine de la date ymd */
+function rotTeam(ymd,sh){ const w=rotWeek(ymd); for(const s0 of [1,2,3]){ if(ROT_CYC[(((ROT_CYC.indexOf(s0)+w)%3)+3)%3]===sh) return s0; } return null; }
+const rotName=(t,s0)=>String(((ROT[t]||{})[s0])||'?').toUpperCase();
+const rotPair=s0=>rotName('TC3',s0)+' + '+rotName('TCE',s0);
+function rotShiftOf(ymd,s0){ const w=rotWeek(ymd); return ROT_CYC[(((ROT_CYC.indexOf(s0)+w)%3)+3)%3]; }
+const rotWeekLab=ymd=>{ const w=rotWeek(ymd), st=new Date(ymdMs(ROT.ref)+w*7*864e5).toISOString().slice(0,10); return 'semaine du '+st.slice(8,10)+'/'+st.slice(5,7); };
+const todayCasa=()=>{ try{ return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Casablanca'}); }catch(e){ return new Date().toISOString().slice(0,10); } };
+/* cumul par groupe (une équipe par terminal) : chaque ligne du rapport est attribuée à l'équipe de service ce jour-là au shift de la ligne */
+function perfGroups(P,terms){
+  const A={}; P.days.forEach(d=>terms.forEach(t=>((d[t]||{}).lines||[]).forEach(l=>{ if(!SHL[l.s]) return; const s0=rotTeam(d.d,l.s); if(!s0) return; const k=t+'|'+s0, a=A[k]||(A[k]={t,s0,mv:0,bi:0,be:0,b:0,h:0,ar:0,days:new Set()}); a.mv+=l.mv; a.b+=l.bi+l.be; a.h+=l.hbe; a.ar+=l.ar; a.days.add(d.d); })));
+  return Object.values(A).map(a=>Object.assign({},a,{r:a.h?a.mv/a.h:null,nj:a.days.size,lab:(terms.length>1?a.t+' · ':'')+rotName(a.t,a.s0)})).sort((x,y)=>(y.r||0)-(x.r||0));
+}
+/* équipes complètes (groupe TC3 + groupe TCE qui tournent ensemble) */
+function perfPairs(P){
+  const A={}; P.days.forEach(d=>['TCE','TC3'].forEach(t=>((d[t]||{}).lines||[]).forEach(l=>{ if(!SHL[l.s]) return; const s0=rotTeam(d.d,l.s); if(!s0) return; const a=A[s0]||(A[s0]={s0,mv:0,b:0,h:0,ar:0}); a.mv+=l.mv; a.b+=l.bi+l.be; a.h+=l.hbe; a.ar+=l.ar; })));
+  return Object.values(A).map(a=>Object.assign({},a,{r:a.h?a.mv/a.h:null,lab:rotPair(a.s0)})).sort((x,y)=>(y.r||0)-(x.r||0));
+}
+function rotCard(){
+  const t=todayCasa(), w=rotWeek(t), line=(ymd)=>[1,2,3].map(sh=>{ const s0=rotTeam(ymd,sh); return `<tr><td><b>S${sh}</b></td><td>${esc(rotName('TC3',s0))}</td><td>${esc(rotName('TCE',s0))}</td></tr>`; }).join('');
+  const nxt=new Date(ymdMs(t)+7*864e5).toISOString().slice(0,10);
+  return `<section class="m-box"><b class="tr-h">Rotation des équipes · ${rotWeekLab(t)} (S1 → S3 → S2 → S1)</b><table class="tr-t"><thead><tr><th>Shift</th><th>TC3</th><th>TCE</th></tr></thead><tbody>${line(t)}</tbody></table><b class="tr-h" style="display:block;margin-top:10px">Semaine suivante (${rotWeekLab(nxt)})</b><table class="tr-t"><tbody>${line(nxt)}</tbody></table>${canDrv()?'<div class="m-date"><button type="button" class="m-up tr-btn" id="rotEdit">Modifier la rotation</button></div>':''}</section>`;
+}
+function rotModal(){
+  const f=(t,s)=>`<div class="rot-r"><label>${t} · S${s}</label><input type="text" id="rot_${t}_${s}" value="${esc(ROT[t][s]||'')}" maxlength="24"></div>`;
+  modal(`<h3>Rotation des équipes</h3><p class="vv">Indiquez les équipes de la semaine de référence ; l'application déduit les autres semaines (S1 → S3 → S2 → S1).</p>
+    <label class="sub" for="rot_ref">Premier jour de la semaine de référence (jour de changement de rotation)</label><input id="rot_ref" type="date" value="${esc(ROT.ref)}">
+    ${[1,2,3].map(s=>f('TC3',s)).join('')}${[1,2,3].map(s=>f('TCE',s)).join('')}
+    <div class="mdl-b"><button type="button" data-close>Annuler</button><button type="button" class="primary" id="rotOk">Enregistrer</button></div><div class="note" id="rotErr"></div>`,
+    m=>{ m.querySelector('#rotOk').onclick=async()=>{ const o={ref:m.querySelector('#rot_ref').value,TC3:{},TCE:{}}, er=m.querySelector('#rotErr');
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(o.ref)){ er.textContent='Date de référence obligatoire.'; return; }
+      for(const t of ['TC3','TCE']) for(const s of [1,2,3]){ const v=m.querySelector('#rot_'+t+'_'+s).value.trim().toUpperCase(); if(!v){ er.textContent='Renseigner les 6 noms.'; return; } o[t][s]=v; }
+      ROT=o; closeModal(); const err=await metaPut('CFG:ROT',JSON.stringify(o)); toast(err?failMsg(err):'Rotation enregistrée (partagée)'); render(); }; });
+}
+/* ---------- classement mensuel des shifts (rendement, trafic traité) ---------- */
+const SHL={1:'S1 · 07h–15h',2:'S2 · 15h–23h',3:'S3 · 23h–07h'};
+const trR=n=>n==null?'—':n.toFixed(1).replace('.',',');
+/* cumul par shift à partir des LIGNES du rapport (les totaux « TOT 1e/2e/3e » du fichier sont parfois mal étiquetés) ; trié par rendement décroissant */
+function perfShifts(P,terms){
+  const A={}; P.days.forEach(d=>terms.forEach(t=>((d[t]||{}).lines||[]).forEach(l=>{ if(!SHL[l.s]) return; const a=A[l.s]||(A[l.s]={s:l.s,mv:0,bi:0,be:0,b:0,h:0,ar:0}); a.mv+=l.mv; a.bi+=l.bi; a.be+=l.be; a.b+=l.bi+l.be; a.h+=l.hbe; a.ar+=l.ar; })));
+  return Object.values(A).map(a=>Object.assign({},a,{r:a.h?a.mv/a.h:null})).sort((x,y)=>(y.r||0)-(x.r||0));
+}
+const perfInfo=P=>{ const y=+P.ym.slice(0,4), m=+P.ym.slice(5,7), ld=+P.last.slice(8,10), dim=trDays(y,m), partial=ld<dim; return {partial,ld,dim,lab:trMois(P.ym)+(partial?' (au '+ld+'/'+P.ym.slice(5,7)+')':'')}; };
+function rankRows(rows,cl,withLabel,head){ const tot=rows.reduce((a,x)=>({mv:a.mv+x.mv,b:a.b+x.b,h:a.h+x.h}),{mv:0,b:0,h:0}), rt=tot.h?tot.mv/tot.h:null;
+  return `<table class="tr-t"><thead><tr><th>#</th><th>${head||(withLabel?'Terminal · Shift':'Shift')}</th><th>Rendt</th><th>Mvts</th><th>Boîtes</th></tr></thead><tbody>${rows.map((x,i)=>`<tr><td><b>${i+1}</b></td><td>${esc(x.lab||SHL[x.s])}</td><td class="tr-v ${cl(x.r)}"><b>${trR(x.r)}</b></td><td>${trF(x.mv)}</td><td>${trF(x.b)}</td></tr>`).join('')}<tr class="tr-tot"><td></td><td><b>Mois</b></td><td class="tr-v ${cl(rt)}"><b>${trR(rt)}</b></td><td><b>${trF(tot.mv)}</b></td><td><b>${trF(tot.b)}</b></td></tr></tbody></table>`; }
+function rankByTerminal(P){ const out=[]; ['TCE','TC3'].forEach(t=>perfShifts(P,[t]).forEach(x=>out.push(Object.assign({},x,{lab:t+' · '+SHL[x.s]})))); return out.sort((a,b)=>(b.r||0)-(a.r||0)); }
+function buildShiftPdf(P,Pm,obj){
+  const {jsPDF}=window.jspdf, d=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}), inf=perfInfo(P);
+  const HEAD={fillColor:[11,92,107],textColor:255,fontSize:10}, BODY={fontSize:10,cellPadding:2.4}, al={2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}};
+  const num=n=>n==null?'-':Math.round(n).toLocaleString('fr-FR').replace(/[  ]/g,' '), rr=n=>n==null?'-':n.toFixed(1).replace('.',',');
+  d.setFont('helvetica','bold'); d.setFontSize(17); d.text('CLASSEMENT DES EQUIPES ET DES SHIFTS - RENDEMENT MENSUEL',14,16);
+  d.setFont('helvetica','normal'); d.setFontSize(10.5); d.setTextColor(80);
+  d.text('Marsa Maroc - TCE / TC3PC  |  '+inf.lab.replace(/[^\x20-\x7eÀ-ÿ]/g,'')+'  |  objectif '+obj+' mvts / heure de portique',14,22);
+  d.setTextColor(0); let y=30;
+  const sect=(title,rows,withLabel,head)=>{ if(y>245){ d.addPage(); y=18; } d.setFont('helvetica','bold'); d.setFontSize(12); d.text(title,14,y);
+    const tot=rows.reduce((a,x)=>({mv:a.mv+x.mv,b:a.b+x.b,h:a.h+x.h}),{mv:0,b:0,h:0});
+    const body=rows.map((x,i)=>[String(i+1),x.lab||SHL[x.s].replace('·','-'),rr(x.r),num(x.mv),num(x.b)]); body.push(['','Mois',rr(tot.h?tot.mv/tot.h:null),num(tot.mv),num(tot.b)]);
+    d.autoTable({startY:y+3,head:[['#',head||(withLabel?'Terminal - Shift':'Shift'),'Rendement','Mouvements','Boites traitees']],body,headStyles:HEAD,styles:BODY,columnStyles:al,margin:{left:14,right:14},
+      didParseCell:h=>{ if(h.section==='head'&&h.column.index>=2) h.cell.styles.halign='right'; if(h.section==='body'&&h.row.index===body.length-1) h.cell.styles.fontStyle='bold'; if(h.section==='body'&&h.column.index===2&&h.row.index<body.length-1){ const v=rows[h.row.index].r; h.cell.styles.textColor=v==null?0:v>=obj?[22,120,70]:v>=Math.min(20,obj)?[190,110,0]:[180,35,30]; h.cell.styles.fontStyle='bold'; } }});
+    y=d.lastAutoTable.finalY+9; };
+  const nm=x=>Object.assign({},x,{lab:x.lab.replace(/\u00b7/g,'-')});
+  sect('TC3 - classement des equipes',perfGroups(P,['TC3']).map(nm),true,'Equipe');
+  sect('TCE - classement des equipes',perfGroups(P,['TCE']).map(nm),true,'Equipe');
+  sect('Equipes completes (groupe TC3 + groupe TCE)',perfPairs(P).map(nm),true,'Equipe');
+  { const t0=todayCasa(); d.setFont('helvetica','normal'); d.setFontSize(9); d.setTextColor(90); d.text(d.splitTextToSize('Rotation en cours ('+rotWeekLab(t0)+') : '+[1,2,3].map(sh=>'S'+sh+' '+rotPair(rotTeam(t0,sh))).join(' | ')+'. Rotation hebdomadaire S1 > S3 > S2 > S1.',182),14,y-3); d.setTextColor(0); y+=8; }
+  sect('Tous terminaux (TCE + TC3) - classement des shifts (creneaux)',perfShifts(P,['TCE','TC3']),false);
+  sect('TCE - classement des shifts (creneaux)',perfShifts(P,['TCE']),false);
+  sect('TC3 - classement des shifts (creneaux)',perfShifts(P,['TC3']),false);
+  sect('Classement general terminal et creneau',rankByTerminal(P).map(nm),true);
+  const H=Pm.slice().sort((a,b)=>a.ym<b.ym?1:-1);
+  if(H.length>1){ const body=H.map(p=>{ const r=perfShifts(p,['TCE','TC3']), g=s=>{ const x=r.find(z=>z.s===s); return x?rr(x.r):'-'; }; return [perfInfo(p).lab.replace(/[^\x20-\x7eÀ-ÿ]/g,''),g(1),g(2),g(3),r.length?'S'+r[0].s:'-']; });
+    if(y>235){ d.addPage(); y=18; } d.setFont('helvetica','bold'); d.setFontSize(12); d.text('Mois precedents - rendement par shift (TCE + TC3)',14,y);
+    d.autoTable({startY:y+3,head:[['Mois','S1','S2','S3','Meilleur']],body,headStyles:HEAD,styles:BODY,columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},margin:{left:14,right:14},didParseCell:h=>{ if(h.section==='head'&&h.column.index>=1) h.cell.styles.halign='right'; }}); y=d.lastAutoTable.finalY+8; }
+  d.setFont('helvetica','normal'); d.setFontSize(8.5); d.setTextColor(110);
+  d.text(d.splitTextToSize('Rendement = mouvements / heures de portique. Boites = import + export manutentionnes. Source : rapport journalier de performance operationnelle.',182),14,Math.min(y,282));
+  return d;
+}
+async function shareShiftPdf(P,Pm,obj){
+  const inf=perfInfo(P), name='Classement_equipes_shifts_'+P.ym+'.pdf', d=buildShiftPdf(P,Pm,obj), blob=d.output('blob');
+  const f=new File([blob],name,{type:'application/pdf'});
+  try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:'Classement des shifts - '+inf.lab,text:'Rendement mensuel par shift - '+inf.lab}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
+  saveFile(name,blob);
+}
 /* part d'un terminal dans l'EVP / les boîtes du même mois de l'an dernier (bilan mensuel) : sert à estimer le 2025 par terminal, absent du fichier quotidien */
 function trShare(b,term,ymd){
   if(!b||+ymd.slice(0,4)!==b.year) return null; const m=+ymd.slice(5,7), t=b.T[term]&&b.T[term].y25&&b.T[term].y25[m], o=b.T.TOT&&b.T.TOT.y25&&b.T.TOT.y25[m];
@@ -657,7 +746,7 @@ function renderTraf(){
   if(!monLoaded){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Chargement…',false,true)+'<div class="m-body"><div class="empty"><b>Chargement…</b></div></div>'; mBind(); loadMonthly().then(()=>render()).catch(()=>{ monLoaded=true; render(); }); return; }
   const imp=canImp()?`<div class="m-date"><label class="m-up">Importer un rapport (trafic, performance ou bilan mensuel, fichier Excel)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'';
   const T=Object.values(mon).filter(x=>x&&x.kind==='trafic').sort((a,b)=>a.ym<b.ym?1:-1), Pm=Object.values(mon).filter(x=>x&&x.kind==='perf'), Bm=Object.values(mon).filter(x=>x&&x.kind==='bilan').sort((a,b)=>b.year-a.year), BL=Bm[0]?renderBilan(Bm[0]):'';
-  const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; render(); }; };
+  const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; render(); }; const re=$('#rotEdit'); if(re) re.onclick=rotModal; const sp=$('#shPdf'); if(sp) sp.onclick=()=>{ try{ window.__shPdf(); }catch(e){ toast('PDF impossible : '+e.message); } }; };
   if(!T.length&&!Pm.length&&!BL){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Aucun rapport reçu',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucun rapport de trafic</b>Les rapports « Suivi Trafic Quotidien » et « Rapport Journalier de Performance Opérationnelle » arrivent par e-mail (boîte de l'application) ou s'importent ici.</div></div>`; bind(); return; }
   const years=[...new Set(T.map(x=>x.ym.slice(0,4)))];
   const opts=[...T.map(x=>['M:'+x.ym,trMois(x.ym)]),...years.filter(y=>T.filter(x=>x.ym.slice(0,4)===y).length>1).map(y=>['Y:'+y,'Cumul '+y+' (mois reçus)'])];
@@ -687,6 +776,15 @@ function renderTraf(){
     const aE=agg('TCE'), a3=agg('TC3'), all=(aE.mv+a3.mv)/((aE.h+a3.h)||1);
     body+=`<h3 class="m-h">Performance d'exploitation · ${trMois(P.ym)} (jusqu'au ${trDay(P.last)})</h3>`;
     body+=`<div class="tr-kpi"><div class="tr-k"><span>Mouvements TCE</span><b>${trF(aE.mv)}</b><small>rendement portique</small><em class="${cl(aE.r)}">${aE.r==null?'—':aE.r.toFixed(1).replace('.',',')}</em></div><div class="tr-k"><span>Mouvements TC3</span><b>${trF(a3.mv)}</b><small>rendement portique</small><em class="${cl(a3.r)}">${a3.r==null?'—':a3.r.toFixed(1).replace('.',',')}</em></div><div class="tr-k"><span>Rendement global</span><b class="tr-v ${cl(all)}">${all.toFixed(1).replace('.',',')}</b><small>objectif ${obj}</small><em></em></div><div class="tr-k"><span>Arrêts TCE (min)</span><b>${trF(aE.ar)}</b><small>boîtes imp./exp.</small><em>${trF(aE.bi)} / ${trF(aE.be)}</em></div><div class="tr-k"><span>Arrêts TC3 (min)</span><b>${trF(a3.ar)}</b><small>boîtes imp./exp.</small><em>${trF(a3.bi)} / ${trF(a3.be)}</em></div><div class="tr-k"><span>Boîtes manutentionnées</span><b>${trF(aE.bi+aE.be+a3.bi+a3.be)}</b><small>import ${trF(aE.bi+a3.bi)}</small><em>export ${trF(aE.be+a3.be)}</em></div></div>`;
+    { const tt=trTerm(), inf=perfInfo(P), terms=tt==='ALL'?['TCE','TC3']:[tt], R1=perfShifts(P,terms);
+      if(R1.length){
+        { const G1=perfGroups(P,terms);
+          if(G1.length){ const lg=x=>Object.assign({},x,{lab:x.lab+' ('+x.nj+' j)'});
+            body+=`<h3 class="m-h">Classement des équipes · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité de chaque équipe, du meilleur au moins bon</b>${rankRows(G1.map(lg),cl,true,'Équipe')}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Équipes complètes (groupe TC3 + groupe TCE)</b>${rankRows(perfPairs(P),cl,true,'Équipe')}`:''}<p class="m-note" style="margin:8px 2px 0">Chaque journée est attribuée à l'équipe de service ce jour-là d'après la rotation hebdomadaire (S1 → S3 → S2 → S1) ; (n j) = jours travaillés dans le mois. Si les équipes ne sont pas les bonnes pour une période, corrigez la rotation ci-dessous.</p></section>${rotCard()}`; } }
+        body+=`<h3 class="m-h">Classement des créneaux (shifts) · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité, du meilleur au moins bon</b>${rankRows(R1,cl,false)}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Détail par terminal et par shift</b>${rankRows(rankByTerminal(P),cl,true)}`:''}<p class="m-note" style="margin:8px 2px 0">Rendement = mouvements ÷ heures de portique (objectif ${obj}). Boîtes = import + export manutentionnés.${inf.partial?' Mois en cours : résultat provisoire, définitif en fin de mois.':''}</p><div class="m-date"><button type="button" class="m-up tr-btn" id="shPdf">Partager le classement en PDF (3 shifts)</button></div></section>`;
+        if(Pm.length>1){ const H=Pm.slice().sort((a,b)=>a.ym<b.ym?1:-1);
+          body+=`<section class="m-box"><b class="tr-h">Mois précédents · rendement par shift (${tt==='ALL'?'TCE + TC3':tt})</b><table class="tr-t"><thead><tr><th>Mois</th><th>S1</th><th>S2</th><th>S3</th><th>Meilleur</th></tr></thead><tbody>${H.map(p=>{ const r=perfShifts(p,terms), g=n=>{ const x=r.find(z=>z.s===n); return `<td class="tr-v ${cl(x&&x.r)}">${x?trR(x.r):'—'}</td>`; }; return `<tr><td>${esc(perfInfo(p).lab)}</td>${g(1)}${g(2)}${g(3)}<td><b>${r.length?'S'+r[0].s:'—'}</b></td></tr>`; }).join('')}</tbody></table></section>`; }
+        window.__shPdf=()=>shareShiftPdf(P,Pm,obj); } }
     const rows=P.days.slice().map(d=>{ const e=d.TCE.tot||{mv:0,hbe:0,ar:0}, t=d.TC3.tot||{mv:0,hbe:0,ar:0}, r=(e.hbe+t.hbe)?(e.mv+t.mv)/(e.hbe+t.hbe):null; return `<tr><td>${trDay(d.d)}</td><td>${trF(e.mv)}</td><td>${trF(t.mv)}</td><td class="tr-v ${cl(r)}">${r==null?'—':r.toFixed(1).replace('.',',')}</td><td>${trF(e.ar+t.ar)}</td></tr>`; }).join('');
     body+=`<section class="m-box"><b class="tr-h">Jour par jour</b><table class="tr-t"><thead><tr><th>Jour</th><th>Mvts TCE</th><th>Mvts TC3</th><th>Rendt</th><th>Arrêts min</th></tr></thead><tbody>${rows}</tbody></table></section>`;
     const V={}; ['TCE','TC3'].forEach(T3=>P.days.forEach(d=>d[T3].lines.forEach(l=>{ const k=T3+'|'+l.v; const o=V[k]||(V[k]={t:T3,v:l.v,mv:0,h:0,ar:0,j:new Set()}); o.mv+=l.mv; o.h+=l.hbe; o.ar+=l.ar; o.j.add(d.d); })));
@@ -749,13 +847,14 @@ async function loadSnaps(retry){
   const dr=!canDrv()?{error:1}:await sb.from('driver_shift').select('data').order('ts',{ascending:false}).limit(30);
   const dd=dr.error?[]:dr.data.map(r=>r.data).reverse();
   /* postes a quai saisis par l'utilisateur (table escale_meta ; a defaut, memoire de cet appareil) */
-  const mr=await sb.from('escale_meta').select('visit,poste,updated_at'); let mt={}, cm={}, dp={}, gtv=null;
-  const ap=(k,val,ts)=>{ if(k==='CFG:GT'){ gtv=val?+val:null; } else if(/^DEP:/.test(k)){ if(val) dp[k.slice(4)]=ts||1; else delete dp[k.slice(4)]; } else if(/^CRANE:/.test(k)){ if(val){ const q=val.split('|'); cm[k.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:ts||0}; } else delete cm[k.slice(6)]; } else { if(val) mt[k]=val; else delete mt[k]; } };
+  const mr=await sb.from('escale_meta').select('visit,poste,updated_at'); let mt={}, cm={}, dp={}, gtv=null, rotv=null;
+  const ap=(k,val,ts)=>{ if(k==='CFG:GT'){ gtv=val?+val:null; } else if(k==='CFG:ROT'){ try{ const o=JSON.parse(val); rotv=o&&o.ref&&o.TC3&&o.TCE?o:null; }catch(e){ rotv=null; } } else if(/^DEP:/.test(k)){ if(val) dp[k.slice(4)]=ts||1; else delete dp[k.slice(4)]; } else if(/^CRANE:/.test(k)){ if(val){ const q=val.split('|'); cm[k.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:ts||0}; } else delete cm[k.slice(6)]; } else { if(val) mt[k]=val; else delete mt[k]; } };
   if(!mr.error) mr.data.forEach(r=>{ if(r.poste) ap(r.visit,r.poste,Date.parse(r.updated_at)||0); });
   pendMigrate();
   /* modifications faites sur cet appareil et pas encore enregistrees sur le serveur : elles restent visibles et sont renvoyees */
   { const pd=pendGet(); Object.keys(pd).forEach(k=>ap(k,pd[k].v,pd[k].ts)); if(!mr.error&&Object.keys(pd).length) pendFlush(); }
   if(gtv>0&&gtv<=80) GT=gtv;
+  ROT=rotv||ROT_DEFAULT;
   meta=mt; cman=cm; depM=dp;
   { const sr=await sb.from('situation').select('data').order('ts',{ascending:false}).limit(1); let sx=null;
     if(!sr.error&&sr.data&&sr.data.length) sx=sr.data[0].data; else { try{ sx=JSON.parse(localStorage.getItem('situation')||'null'); }catch(e){} }
@@ -1043,7 +1142,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.36';
+const APP_V='7.38';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
