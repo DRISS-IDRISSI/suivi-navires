@@ -370,8 +370,8 @@ function isTraficRows(R) {
   return R.slice(0, 8).some((l) => l.some((x) => /Suivi Trafic Quotidien/i.test(String(x))));
 }
 function parseTrafic(R) {
-  const hr = R.findIndex((l) => sTxt(l[3]) === "Jour");
-  if (hr < 0) throw new Error("En-t\xEAte \xAB Jour \xBB introuvable (Suivi Trafic Quotidien).");
+  const hr = R.findIndex((l) => { const H = l.map((x) => sTxt(x)); return H.includes("IMPORT") && H.includes("EXPORT (P)") && H.includes("EXPORT (V)") && H.includes("GLOBAL"); });
+  if (hr < 0) throw new Error("En-t\xEAte IMPORT / EXPORT / GLOBAL introuvable (Suivi Trafic Quotidien).");
   const H = R[hr].map((x) => sTxt(x));
   const cI = H.indexOf("IMPORT"), cP = H.indexOf("EXPORT (P)"), cV = H.indexOf("EXPORT (V)"), cG = H.indexOf("GLOBAL");
   if (cI < 0 || cP < 0 || cV < 0 || cG < 0) throw new Error("Colonnes IMPORT / EXPORT (P) / EXPORT (V) / GLOBAL introuvables.");
@@ -1043,7 +1043,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.35';
+const APP_V='7.36';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };

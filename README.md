@@ -224,6 +224,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.36 — Rapport Trafic Quotidien : en-tête plus tolérant
+- Le fichier de septembre n'avait pas la cellule « Jour » dans l'en-tête et était refusé. L'en-tête est maintenant reconnu par les colonnes IMPORT / EXPORT (P) / EXPORT (V) / GLOBAL (application et ingest-report v10).
+
 ## v7.35 — Bilan mensuel : mois en cours partiel
 - Le fichier « Situation du Trafic Conteneur » arrêté en cours de mois (ex. au 12/10) est géré : le mois en cours est comparé aux mêmes jours de 2025, signalé « (au 12/10) », et le calcul « pour égaler 2025 » se fait sur les jours restants de l'année.
 - Un fichier sans feuille « D.S » (délai de séjour) n'efface plus le délai de séjour déjà reçu (ingest-report v9).
