@@ -578,6 +578,7 @@ async function loadMonthly(){
   mon=o; monLoaded=true;
 }
 async function saveMonthly(m){
+  if(m.kind==='bilan'&&!m.ds){ if(!monLoaded) await loadMonthly(); const o=mon[m.id]; if(o&&o.ds) m.ds=o.ds; }   /* le fichier mensuel sans feuille D.S ne doit pas effacer le délai de séjour déjà reçu */
   const {error}=await sb.from('monthly').upsert({id:m.id,ts:new Date().toISOString(),data:m});
   if(error){ try{ const l=JSON.parse(localStorage.getItem('monthly')||'{}'); l[m.id]=m; localStorage.setItem('monthly',JSON.stringify(l)); }catch(e){} toast('Table monthly absente : gardé sur cet appareil seulement ('+(error.message||'')+').'); }
   await loadMonthly(); if(tab==='traf') render(); return true;
@@ -613,20 +614,23 @@ function trBars(rows){ /* barres groupees par mois : 2026 (plein) / 2025 (clair)
 function renderBilan(b){
   const cur=trTerm(), key=cur==='ALL'?'TOT':cur, S=b.T&&b.T[key]; if(!S) return '';
   const M=Object.keys(S.months).map(Number).sort((x,y)=>x-y); if(!M.length) return '';
-  const lastM=M[M.length-1], y=b.year, asof=b.asof||'';
+  const lastM=M[M.length-1], y=b.year, asof=b.asof||'', dim=trDays(y,lastM), aday=asof&&+asof.slice(5,7)===lastM?+asof.slice(8,10):dim, partial=aday<dim, doneM=partial?lastM-1:lastM;
+  const ml=m=>TR_MOIS[m-1]+(partial&&m===lastM?' (au '+aday+'/'+String(m).padStart(2,'0')+')':'');
   const sum=f=>M.reduce((a,m)=>a+(S.months[m][f]||0),0);
   const e1=sum('glE'), e0=sum('glE0'), p=trPct(e1,e0), kp=(t,f)=>{ const a=sum(f),c=sum(f+'0'),q=trPct(a,c); return `<div class="tr-k"><span>${t}</span><b>${trF(a)}</b><small>${y-1} : ${trF(c)}</small><em class="${trC(q)}">${trP(q)}</em></div>`; };
   const lbl=cur==='ALL'?'TCE + TC3':cur;
   let h=`<h3 class="m-h">Bilan ${y} contre ${y-1} · ${lbl}</h3>`;
-  h+=`<div class="tr-hero ${trC(p)}"><span>EVP global · janvier à ${TR_MOIS[lastM-1]} ${y}</span><b>${trF(e1)}</b><div>${y-1} (même période) : ${trF(e0)} EVP</div><strong>${trP(p)} · ${e1-e0>0?'+':e1-e0<0?'−':''}${trF(Math.abs(e1-e0))} EVP</strong></div>`;
+  h+=`<div class="tr-hero ${trC(p)}"><span>EVP ${cur==='ALL'?'global':cur} · janvier à ${partial?'ce jour ('+trDay(asof)+')':TR_MOIS[lastM-1]} ${y}</span><b>${trF(e1)}</b><div>${y-1} (même période) : ${trF(e0)} EVP</div><strong>${trP(p)} · ${e1-e0>0?'+':e1-e0<0?'−':''}${trF(Math.abs(e1-e0))} EVP</strong></div>`;
   h+=`<div class="tr-kpi">${kp('Import (EVP)','impE')}${kp('Export plein (EVP)','expPE')}${kp('Export vide (EVP)','expVE')}${kp('Boîtes (global)','gl')}</div>`;
   /* ce qu'il faut pour egaler l'annee precedente */
   const full=Object.keys(S.y25||{}).length===12?Object.values(S.y25).reduce((a,m)=>a+(m.glE||0),0):null;
-  if(full&&lastM<12){ const left=12-lastM, need=full-e1, rest25=[...Array(left)].reduce((a,_,i)=>a+((S.y25[lastM+1+i]||{}).glE||0),0);
-    h+=`<p class="m-note"><b>Pour égaler ${y-1} sur l'année</b> (${trF(full)} EVP) : il reste ${trF(need)} EVP à réaliser, soit ${trF(need/left)} EVP par mois sur ${left} mois (${y-1} sur ces mêmes mois : ${trF(rest25/left)} par mois). Rythme ${TR_MOIS[lastM-1]} ${y} : ${trF((S.months[lastM]||{}).glE)} EVP.</p>`; }
-  const rows=M.map(m=>({m,l:TR_MOIS[m-1].slice(0,3),a:S.months[m].glE||0,b:S.months[m].glE0||0}));
-  h+=`<section class="m-box"><b class="tr-h">EVP par mois : ${y} (foncé) contre ${y-1} (clair)</b>${trBars(rows)}</section>`;
-  h+=`<section class="m-box"><b class="tr-h">Détail mensuel (EVP global)</b><table class="tr-t"><thead><tr><th>Mois</th><th>${y}</th><th>${y-1}</th><th>Écart</th></tr></thead><tbody>${rows.map(r=>{ const q=trPct(r.a,r.b); return `<tr><td>${TR_MOIS[r.m-1]}</td><td>${trF(r.a)}</td><td>${trF(r.b)}</td><td class="tr-v ${trC(q)}">${trP(q)}</td></tr>`; }).join('')}<tr><td><b>Cumul</b></td><td><b>${trF(e1)}</b></td><td><b>${trF(e0)}</b></td><td class="tr-v ${trC(p)}"><b>${trP(p)}</b></td></tr></tbody></table></section>`;
+  if(full&&(partial||lastM<12)){
+    const end=new Date(Date.UTC(y,11,31)), cur=new Date(Date.UTC(y,lastM-1,aday)), dl=Math.round((end-cur)/864e5), mleft=dl/30.4375, need=full-e1, e0t=e0, rest25=full-e0t;
+    const lastFull=doneM>=1?(S.months[doneM]||{}).glE:null;
+    h+=`<p class="m-note"><b>Pour égaler ${y-1} sur l'année</b> (${trF(full)} EVP) : il reste ${trF(need)} EVP à réaliser en ${dl} jours, soit ${trF(need/mleft)} EVP par mois (${y-1} sur la même période : ${trF(rest25/mleft)} par mois).${lastFull!=null?` Dernier mois complet, ${TR_MOIS[doneM-1]} ${y} : ${trF(lastFull)} EVP.`:''}</p>`; }
+  const rows=M.map(m=>({m,l:TR_MOIS[m-1].slice(0,3)+(partial&&m===lastM?'*':''),a:S.months[m].glE||0,b:S.months[m].glE0||0}));
+  h+=`<section class="m-box"><b class="tr-h">EVP par mois : ${y} (foncé) contre ${y-1} (clair)</b>${trBars(rows)}${partial?`<p class="m-note" style="margin:4px 2px 0">* ${TR_MOIS[lastM-1]} : du 1er au ${aday}, comparé aux mêmes jours de ${y-1}.</p>`:''}</section>`;
+  h+=`<section class="m-box"><b class="tr-h">Détail mensuel (EVP global)</b><table class="tr-t"><thead><tr><th>Mois</th><th>${y}</th><th>${y-1}</th><th>Écart</th></tr></thead><tbody>${rows.map(r=>{ const q=trPct(r.a,r.b); return `<tr><td>${ml(r.m)}</td><td>${trF(r.a)}</td><td>${trF(r.b)}</td><td class="tr-v ${trC(q)}">${trP(q)}</td></tr>`; }).join('')}<tr><td><b>Cumul</b></td><td><b>${trF(e1)}</b></td><td><b>${trF(e0)}</b></td><td class="tr-v ${trC(p)}"><b>${trP(p)}</b></td></tr></tbody></table></section>`;
   if(cur==='ALL'&&b.T.TCE&&b.T.TC3){ const a=T3=>{ const m=b.T[T3].months; const M2=Object.keys(m); return [M2.reduce((s,k)=>s+(m[k].glE||0),0),M2.reduce((s,k)=>s+(m[k].glE0||0),0)]; };
     h+=`<section class="m-box"><b class="tr-h">Par terminal (EVP, cumul)</b><table class="tr-t"><thead><tr><th>Terminal</th><th>${y}</th><th>${y-1}</th><th>Écart</th></tr></thead><tbody>${['TCE','TC3'].map(t=>{ const [x,z]=a(t), q=trPct(x,z); return `<tr><td>${t}</td><td>${trF(x)}</td><td>${trF(z)}</td><td class="tr-v ${trC(q)}">${trP(q)}</td></tr>`; }).join('')}</tbody></table></section>`; }
   /* delai de sejour */
@@ -1039,7 +1043,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.34';
+const APP_V='7.35';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
