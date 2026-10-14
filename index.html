@@ -571,6 +571,7 @@ function parseBilan(wb, sheetRows) {
 const gridRows=ws=>{ const e=XLSX.utils.decode_range(ws['!ref']||'A1').e; return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:'',range:{s:{r:0,c:0},e}}); };
 let mon={}, monLoaded=false, trSel=null;
 async function loadMonthly(){
+  if(!canDrv()){ mon={}; monLoaded=true; return; }
   const r=await sb.from('monthly').select('id,data'); let o={};
   if(!r.error&&r.data) r.data.forEach(x=>{ o[x.id]=x.data; });
   try{ const l=JSON.parse(localStorage.getItem('monthly')||'{}'); Object.keys(l).forEach(k=>{ if(!o[k]||(l[k].last||'')>(o[k].last||'')) o[k]=l[k]; }); }catch(e){}
@@ -637,6 +638,7 @@ function renderBilan(b){
   return h;
 }
 function renderTraf(){
+  if(!canDrv()){ tab='pilot'; render(); return; }   /* rubrique réservée aux comptes responsables (et administrateurs) */
   const app=$('#app'); document.body.classList.add('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
   if(!monLoaded){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Chargement…',false,true)+'<div class="m-body"><div class="empty"><b>Chargement…</b></div></div>'; mBind(); loadMonthly().then(()=>render()).catch(()=>{ monLoaded=true; render(); }); return; }
   const imp=canImp()?`<div class="m-date"><label class="m-up">Importer un rapport (trafic, performance ou bilan mensuel, fichier Excel)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'';
@@ -1025,7 +1027,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.32';
+const APP_V='7.33';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
@@ -1317,7 +1319,7 @@ const IC={
 function mTop(title,sub,back,noChip){
   return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
     <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div>${noChip?'<span style="width:44px"></span>':`<button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TCE+TC3':termSel()}${myTerms().length>1?' ⇄':''}</button>`}</div>
-  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab!=='pilot'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':''}${tab!=='dir'?'<button type="button" data-m="dir">Direction</button>':''}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="prev">Prévisions (situation 8 h)</button><button type="button" data-m="traf">Trafic · comparaison 2025</button><button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
+  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab!=='pilot'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':''}${tab!=='dir'?'<button type="button" data-m="dir">Direction</button>':''}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="prev">Prévisions (situation 8 h)</button>${canDrv()?'<button type="button" data-m="traf">Trafic · comparaison 2025</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
 async function hardReload(){ toast('Rechargement…'); try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){} location.reload(); }
@@ -1507,7 +1509,7 @@ function render(){
     $('#app').innerHTML=meState==='load'?'<div class="empty"><b>Chargement…</b></div>':`<div class="empty"><b>Compte non autorisé</b>Votre compte (${esc(idOf(session.user.email))}) n'est pas activé ou a été désactivé. Contactez l'administrateur de l'application.</div>`; return; }
   $('#btnImport').hidden=!on||!canImp(); $('#btnPwd').hidden=!on; $('#drop').hidden=!on||!canImp()||(tab!=='ana'&&tab!=='drv');
   if(!on){ showLogin(); return; }
-  { const T=[['dir','Direction'],['pilot','Pilotage'],['prev','Prévisions'],['traf','Trafic']]; if(canDrv()) T.push(['drv','Conducteurs']); T.push(['ana','Analyse']); if(isAdmin()) T.push(['acc','Comptes']);
+  { const T=[['dir','Direction'],['pilot','Pilotage'],['prev','Prévisions']]; if(canDrv()) T.push(['traf','Trafic'],['drv','Conducteurs']); T.push(['ana','Analyse']); if(isAdmin()) T.push(['acc','Comptes']);
     if(!T.some(x=>x[0]===tab)) tab='pilot'; document.body.classList.toggle('dirmode',tab==='dir'); if(tab!=='dir'&&tab!=='prev'&&tab!=='traf'){ document.body.classList.remove('mobpilot'); document.body.classList.remove('dirwide'); } $('#tabs').innerHTML=T.map(x=>`<button type="button" data-tab="${x[0]}">${x[1]}</button>`).join(''); }
   document.querySelectorAll('#tabs [data-tab]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.tab===tab); b.onclick=()=>{tab=b.dataset.tab;try{ history.replaceState(null,'',tab==='dir'?'#direction':location.pathname+location.search); }catch(e){} render();window.scrollTo(0,0);}; });
   const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';

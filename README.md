@@ -224,6 +224,10 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.33 — Trafic réservé aux responsables
+- La rubrique Trafic (comparaison avec 2025, bilan mensuel, performance d'exploitation) n'apparaît plus que pour les comptes Responsable et Administrateur. Les comptes Lecture ne la voient ni dans le menu ni dans les onglets.
+- Protection côté base : relancer SUPABASE_table_monthly.sql pour que la table monthly refuse toute lecture aux comptes Lecture (sinon la rubrique est seulement masquée).
+
 ## v7.32 — Écran Trafic : tableaux dans l'ordre chronologique
 - Les tableaux « Jour par jour » (trafic et performance) et « Détail mensuel » commencent maintenant par le premier jour / mois en haut et finissent par le plus récent en bas.
 - Le tableau « Jour par jour (EVP global) » se termine par une ligne **Cumul** (2026, 2025, écart).
