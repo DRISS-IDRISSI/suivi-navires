@@ -695,9 +695,9 @@ function rankRows(rows,cl,withLabel,head){ const tot=rows.reduce((a,x)=>({mv:a.m
 function rankByTerminal(P){ const out=[]; ['TCE','TC3'].forEach(t=>perfShifts(P,[t]).forEach(x=>out.push(Object.assign({},x,{lab:t+' · '+SHL[x.s]})))); return out.sort((a,b)=>(b.r||0)-(a.r||0)); }
 function buildShiftPdf(P,Pm,obj){
   const {jsPDF}=window.jspdf, d=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}), inf=perfInfo(P);
-  const HEAD={fillColor:[11,92,107],textColor:255,fontSize:10}, BODY={fontSize:10,cellPadding:2.4}, al={2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}};
+  const HEAD={fillColor:[11,92,107],textColor:255,fontSize:10}, BODY={fontSize:9.5,cellPadding:1.7}, al={2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}};
   const num=n=>n==null?'-':Math.round(n).toLocaleString('fr-FR').replace(/[  ]/g,' '), rr=n=>n==null?'-':n.toFixed(1).replace('.',',');
-  d.setFont('helvetica','bold'); d.setFontSize(17); d.text('CLASSEMENT DES EQUIPES ET DES SHIFTS - RENDEMENT MENSUEL',14,16);
+  { const T='CLASSEMENT MENSUEL DES EQUIPES ET DES SHIFTS'; d.setFont('helvetica','bold'); let fs=17; d.setFontSize(fs); while(d.getTextWidth(T)>182&&fs>10){ fs-=0.5; d.setFontSize(fs); } d.text(T,14,16); }
   d.setFont('helvetica','normal'); d.setFontSize(10.5); d.setTextColor(80);
   d.text('Marsa Maroc - TCE / TC3PC  |  '+inf.lab.replace(/[^\x20-\x7eÀ-ÿ]/g,'')+'  |  objectif '+obj+' mvts / heure de portique',14,22);
   d.setTextColor(0); let y=30;
@@ -706,22 +706,19 @@ function buildShiftPdf(P,Pm,obj){
     const body=rows.map((x,i)=>[String(i+1),x.lab||SHL[x.s].replace('·','-'),rr(x.r),num(x.mv),num(x.b)]); body.push(['','Mois',rr(tot.h?tot.mv/tot.h:null),num(tot.mv),num(tot.b)]);
     d.autoTable({startY:y+3,head:[['#',head||(withLabel?'Terminal - Shift':'Shift'),'Rendement','Mouvements','Boites traitees']],body,headStyles:HEAD,styles:BODY,columnStyles:al,margin:{left:14,right:14},
       didParseCell:h=>{ if(h.section==='head'&&h.column.index>=2) h.cell.styles.halign='right'; if(h.section==='body'&&h.row.index===body.length-1) h.cell.styles.fontStyle='bold'; if(h.section==='body'&&h.column.index===2&&h.row.index<body.length-1){ const v=rows[h.row.index].r; h.cell.styles.textColor=v==null?0:v>=obj?[22,120,70]:v>=Math.min(20,obj)?[190,110,0]:[180,35,30]; h.cell.styles.fontStyle='bold'; } }});
-    y=d.lastAutoTable.finalY+9; };
+    y=d.lastAutoTable.finalY+6.5; };
   const nm=x=>Object.assign({},x,{lab:x.lab.replace(/\u00b7/g,'-')});
   sect('TC3 - classement des equipes',perfGroups(P,['TC3']).map(nm),true,'Equipe');
   sect('TCE - classement des equipes',perfGroups(P,['TCE']).map(nm),true,'Equipe');
   sect('Equipes completes (groupe TC3 + groupe TCE)',perfPairs(P).map(nm),true,'Equipe');
-  { const t0=todayCasa(); d.setFont('helvetica','normal'); d.setFontSize(9); d.setTextColor(90); d.text(d.splitTextToSize('Rotation en cours ('+rotWeekLab(t0)+') : '+[1,2,3].map(sh=>'S'+sh+' '+rotPair(rotTeam(t0,sh))).join(' | ')+'. Rotation hebdomadaire S1 > S3 > S2 > S1.',182),14,y-3); d.setTextColor(0); y+=8; }
-  sect('Tous terminaux (TCE + TC3) - classement des shifts (creneaux)',perfShifts(P,['TCE','TC3']),false);
-  sect('TCE - classement des shifts (creneaux)',perfShifts(P,['TCE']),false);
-  sect('TC3 - classement des shifts (creneaux)',perfShifts(P,['TC3']),false);
-  sect('Classement general terminal et creneau',rankByTerminal(P).map(nm),true);
+  { const t0=todayCasa(); d.setFont('helvetica','normal'); d.setFontSize(9); d.setTextColor(90); d.text(d.splitTextToSize('Rotation en cours ('+rotWeekLab(t0)+') : '+[1,2,3].map(sh=>'S'+sh+' '+rotPair(rotTeam(t0,sh))).join(' | ')+'. Rotation hebdomadaire S1 > S3 > S2 > S1.',182),14,y-3); d.setTextColor(0); y+=10; }
+  sect('Classement des shifts (creneaux) - TCE + TC3',perfShifts(P,['TCE','TC3']),false);
   const H=Pm.slice().sort((a,b)=>a.ym<b.ym?1:-1);
   if(H.length>1){ const body=H.map(p=>{ const r=perfShifts(p,['TCE','TC3']), g=s=>{ const x=r.find(z=>z.s===s); return x?rr(x.r):'-'; }; return [perfInfo(p).lab.replace(/[^\x20-\x7eÀ-ÿ]/g,''),g(1),g(2),g(3),r.length?'S'+r[0].s:'-']; });
-    if(y>235){ d.addPage(); y=18; } d.setFont('helvetica','bold'); d.setFontSize(12); d.text('Mois precedents - rendement par shift (TCE + TC3)',14,y);
-    d.autoTable({startY:y+3,head:[['Mois','S1','S2','S3','Meilleur']],body,headStyles:HEAD,styles:BODY,columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},margin:{left:14,right:14},didParseCell:h=>{ if(h.section==='head'&&h.column.index>=1) h.cell.styles.halign='right'; }}); y=d.lastAutoTable.finalY+8; }
+    d.setFont('helvetica','bold'); d.setFontSize(12); d.text('Mois precedents - rendement par shift (TCE + TC3)',14,y);
+    d.autoTable({startY:y+3,head:[['Mois','S1','S2','S3','Meilleur']],body,headStyles:HEAD,styles:BODY,columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},margin:{left:14,right:14},didParseCell:h=>{ if(h.section==='head'&&h.column.index>=1) h.cell.styles.halign='right'; }}); y=d.lastAutoTable.finalY+6; }
   d.setFont('helvetica','normal'); d.setFontSize(8.5); d.setTextColor(110);
-  d.text(d.splitTextToSize('Rendement = mouvements / heures de portique. Boites = import + export manutentionnes. Source : rapport journalier de performance operationnelle.',182),14,Math.min(y,282));
+  d.text(d.splitTextToSize('Rendement = mouvements / heures de portique. Boites = import + export manutentionnes. Source : rapport journalier de performance operationnelle.',182),14,Math.min(y,284));
   return d;
 }
 async function shareShiftPdf(P,Pm,obj){
@@ -1142,7 +1139,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.38';
+const APP_V='7.39';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
