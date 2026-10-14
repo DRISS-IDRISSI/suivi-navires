@@ -224,6 +224,10 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.32 — Écran Trafic : tableaux dans l'ordre chronologique
+- Les tableaux « Jour par jour » (trafic et performance) et « Détail mensuel » commencent maintenant par le premier jour / mois en haut et finissent par le plus récent en bas.
+- Le tableau « Jour par jour (EVP global) » se termine par une ligne **Cumul** (2026, 2025, écart).
+
 ## v7.31 — Bilan mensuel du trafic (TCE / TC3 / TCE+TC3)
 - Nouveau fichier reconnu : « Situation du Trafic Conteneur 2026/2025 » (feuilles Tableau de bord Trafic, TC3, T EST, D.S, Calc). Import par le bouton de l'écran Trafic, ou automatique par e-mail avec la fonction ingest-report v8.
 - Écran Trafic : en haut, « Bilan 2026 contre 2025 » avec le sélecteur TCE | TC3 | TCE+TC3 : cumul EVP et écart, import / export plein / export vide, boîtes, graphique par mois, détail mensuel, comparaison par terminal, ce qu'il faut réaliser par mois pour égaler 2025, et délai de séjour (cumul). Le suivi quotidien reste en dessous.
