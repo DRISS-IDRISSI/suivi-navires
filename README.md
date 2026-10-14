@@ -224,6 +224,15 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.41 — PDF : classement des équipes uniquement
+- Le PDF ne contient plus le tableau « Classement des shifts (créneaux) » : équipes TC3, TCE, équipes complètes, rotation, puis comparatif des mois précédents. Le classement des créneaux reste visible à l'écran.
+
+## v7.40 — Choix du mois pour le classement et le PDF
+- Écran Trafic, section « Performance d'exploitation » : une liste « Performance · mois » permet de choisir le mois (octobre, septembre…) ; le classement des équipes, celui des shifts et le PDF suivent ce mois. Le PDF est nommé `Classement_equipes_shifts_AAAA-MM.pdf`.
+- Le comparatif « Mois précédents » ne liste que les mois antérieurs ou égaux au mois choisi.
+- Le PDF indique la rotation de la dernière semaine du mois choisi.
+- Le mois n'apparaît que si son rapport de performance (« Rapport Journalier de Performance Opérationnelle » du mois) a été reçu ou importé.
+
 ## v7.39 — PDF d'une seule page
 - Le PDF à partager tient sur **une seule page A4** : classement des équipes TC3, TCE, équipes complètes (TC3 + TCE), rotation en cours et classement des shifts (S1/S2/S3, TCE + TC3). Titre ajusté à la largeur de la page.
 - Le comparatif « Mois précédents – rendement par shift » est inclus en bas de la page. Les détails par terminal/créneau restent consultables à l'écran (écran Trafic).

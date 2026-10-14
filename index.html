@@ -570,7 +570,7 @@ function parseBilan(wb, sheetRows) {
   return { kind: "bilan", id: "bilan-" + year, year, last: `${year}-${String(last).padStart(2, "0")}`, asof, T, ds };
 }
 const gridRows=ws=>{ const e=XLSX.utils.decode_range(ws['!ref']||'A1').e; return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:'',range:{s:{r:0,c:0},e}}); };
-let mon={}, monLoaded=false, trSel=null;
+let mon={}, monLoaded=false, trSel=null, pmSel=null;
 async function loadMonthly(){
   if(!canDrv()){ mon={}; monLoaded=true; return; }
   const r=await sb.from('monthly').select('id,data'); let o={};
@@ -697,7 +697,7 @@ function buildShiftPdf(P,Pm,obj){
   const {jsPDF}=window.jspdf, d=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}), inf=perfInfo(P);
   const HEAD={fillColor:[11,92,107],textColor:255,fontSize:10}, BODY={fontSize:9.5,cellPadding:1.7}, al={2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}};
   const num=n=>n==null?'-':Math.round(n).toLocaleString('fr-FR').replace(/[  ]/g,' '), rr=n=>n==null?'-':n.toFixed(1).replace('.',',');
-  { const T='CLASSEMENT MENSUEL DES EQUIPES ET DES SHIFTS'; d.setFont('helvetica','bold'); let fs=17; d.setFontSize(fs); while(d.getTextWidth(T)>182&&fs>10){ fs-=0.5; d.setFontSize(fs); } d.text(T,14,16); }
+  { const T='CLASSEMENT MENSUEL DES EQUIPES'; d.setFont('helvetica','bold'); let fs=17; d.setFontSize(fs); while(d.getTextWidth(T)>182&&fs>10){ fs-=0.5; d.setFontSize(fs); } d.text(T,14,16); }
   d.setFont('helvetica','normal'); d.setFontSize(10.5); d.setTextColor(80);
   d.text('Marsa Maroc - TCE / TC3PC  |  '+inf.lab.replace(/[^\x20-\x7eÀ-ÿ]/g,'')+'  |  objectif '+obj+' mvts / heure de portique',14,22);
   d.setTextColor(0); let y=30;
@@ -711,9 +711,8 @@ function buildShiftPdf(P,Pm,obj){
   sect('TC3 - classement des equipes',perfGroups(P,['TC3']).map(nm),true,'Equipe');
   sect('TCE - classement des equipes',perfGroups(P,['TCE']).map(nm),true,'Equipe');
   sect('Equipes completes (groupe TC3 + groupe TCE)',perfPairs(P).map(nm),true,'Equipe');
-  { const t0=todayCasa(); d.setFont('helvetica','normal'); d.setFontSize(9); d.setTextColor(90); d.text(d.splitTextToSize('Rotation en cours ('+rotWeekLab(t0)+') : '+[1,2,3].map(sh=>'S'+sh+' '+rotPair(rotTeam(t0,sh))).join(' | ')+'. Rotation hebdomadaire S1 > S3 > S2 > S1.',182),14,y-3); d.setTextColor(0); y+=10; }
-  sect('Classement des shifts (creneaux) - TCE + TC3',perfShifts(P,['TCE','TC3']),false);
-  const H=Pm.slice().sort((a,b)=>a.ym<b.ym?1:-1);
+  { const t0=P.last||todayCasa(); d.setFont('helvetica','normal'); d.setFontSize(9); d.setTextColor(90); d.text(d.splitTextToSize('Rotation en fin de periode ('+rotWeekLab(t0)+') : '+[1,2,3].map(sh=>'S'+sh+' '+rotPair(rotTeam(t0,sh))).join(' | ')+'. Rotation hebdomadaire S1 > S3 > S2 > S1.',182),14,y-3); d.setTextColor(0); y+=10; }
+  const H=Pm.filter(x=>x.ym<=P.ym).sort((a,b)=>a.ym<b.ym?1:-1);
   if(H.length>1){ const body=H.map(p=>{ const r=perfShifts(p,['TCE','TC3']), g=s=>{ const x=r.find(z=>z.s===s); return x?rr(x.r):'-'; }; return [perfInfo(p).lab.replace(/[^\x20-\x7eÀ-ÿ]/g,''),g(1),g(2),g(3),r.length?'S'+r[0].s:'-']; });
     d.setFont('helvetica','bold'); d.setFontSize(12); d.text('Mois precedents - rendement par shift (TCE + TC3)',14,y);
     d.autoTable({startY:y+3,head:[['Mois','S1','S2','S3','Meilleur']],body,headStyles:HEAD,styles:BODY,columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},margin:{left:14,right:14},didParseCell:h=>{ if(h.section==='head'&&h.column.index>=1) h.cell.styles.halign='right'; }}); y=d.lastAutoTable.finalY+6; }
@@ -743,7 +742,7 @@ function renderTraf(){
   if(!monLoaded){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Chargement…',false,true)+'<div class="m-body"><div class="empty"><b>Chargement…</b></div></div>'; mBind(); loadMonthly().then(()=>render()).catch(()=>{ monLoaded=true; render(); }); return; }
   const imp=canImp()?`<div class="m-date"><label class="m-up">Importer un rapport (trafic, performance ou bilan mensuel, fichier Excel)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'';
   const T=Object.values(mon).filter(x=>x&&x.kind==='trafic').sort((a,b)=>a.ym<b.ym?1:-1), Pm=Object.values(mon).filter(x=>x&&x.kind==='perf'), Bm=Object.values(mon).filter(x=>x&&x.kind==='bilan').sort((a,b)=>b.year-a.year), BL=Bm[0]?renderBilan(Bm[0]):'';
-  const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; render(); }; const re=$('#rotEdit'); if(re) re.onclick=rotModal; const sp=$('#shPdf'); if(sp) sp.onclick=()=>{ try{ window.__shPdf(); }catch(e){ toast('PDF impossible : '+e.message); } }; };
+  const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; pmSel=null; render(); }; const pm=$('#pmSel'); if(pm) pm.onchange=e=>{ pmSel=e.target.value; render(); }; const re=$('#rotEdit'); if(re) re.onclick=rotModal; const sp=$('#shPdf'); if(sp) sp.onclick=()=>{ try{ window.__shPdf(); }catch(e){ toast('PDF impossible : '+e.message); } }; };
   if(!T.length&&!Pm.length&&!BL){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Aucun rapport reçu',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucun rapport de trafic</b>Les rapports « Suivi Trafic Quotidien » et « Rapport Journalier de Performance Opérationnelle » arrivent par e-mail (boîte de l'application) ou s'importent ici.</div></div>`; bind(); return; }
   const years=[...new Set(T.map(x=>x.ym.slice(0,4)))];
   const opts=[...T.map(x=>['M:'+x.ym,trMois(x.ym)]),...years.filter(y=>T.filter(x=>x.ym.slice(0,4)===y).length>1).map(y=>['Y:'+y,'Cumul '+y+' (mois reçus)'])];
@@ -766,12 +765,12 @@ function renderTraf(){
     if(years.length&&T.length>1){ body+=`<section class="m-box"><b class="tr-h">Mois reçus (${lab})</b><table class="tr-t"><thead><tr><th>Mois</th><th>EVP 2026</th><th>EVP N-1</th><th>Écart</th></tr></thead><tbody>${T.map(x=>{ const v=trView(x.days,noEst?'ALL':tt,B0)||x.days, a=trSum(v,'gl','e'), b=trSum(v,'gl','e0'), p=trPct(a,b); return `<tr><td>${trMois(x.ym)}</td><td>${trF(a)}</td><td>${trF(b)}</td><td class="tr-v ${trC(p)}">${trP(p)}</td></tr>`; }).join('')}</tbody></table></section>`; }
   }
   /* performance d'exploitation du mois (rapport journalier) */
-  const ymP=trSel&&trSel[0]==='M'?trSel.slice(2):(Pm.sort((a,b)=>a.ym<b.ym?1:-1)[0]||{}).ym, P=Pm.find(x=>x.ym===ymP);
+  Pm.sort((a,b)=>a.ym<b.ym?1:-1); const ymP=(pmSel&&Pm.some(x=>x.ym===pmSel))?pmSel:(trSel&&trSel[0]==='M'&&Pm.some(x=>x.ym===trSel.slice(2))?trSel.slice(2):(Pm[0]||{}).ym), P=Pm.find(x=>x.ym===ymP);
   if(P){
     const obj=GT||24, cl=n=>n==null?'':n>=obj?'g':n>=LO()?'w':'c';
     const agg=(T3)=>{ let mv=0,h=0,ar=0,bi=0,be=0; P.days.forEach(d=>{ const t=d[T3].tot; if(t){ mv+=t.mv; h+=t.hbe; ar+=t.ar; bi+=t.bi; be+=t.be; } }); return {mv,h,ar,bi,be,r:h?mv/h:null}; };
     const aE=agg('TCE'), a3=agg('TC3'), all=(aE.mv+a3.mv)/((aE.h+a3.h)||1);
-    body+=`<h3 class="m-h">Performance d'exploitation · ${trMois(P.ym)} (jusqu'au ${trDay(P.last)})</h3>`;
+    body+=`<h3 class="m-h">Performance d'exploitation · ${trMois(P.ym)} (jusqu'au ${trDay(P.last)})</h3>`+(Pm.length>1?`<div class="m-date"><select id="pmSel" aria-label="Mois de performance">${Pm.map(x=>`<option value="${x.ym}" ${x.ym===P.ym?'selected':''}>Performance · ${esc(perfInfo(x).lab)}</option>`).join('')}</select></div>`:'');
     body+=`<div class="tr-kpi"><div class="tr-k"><span>Mouvements TCE</span><b>${trF(aE.mv)}</b><small>rendement portique</small><em class="${cl(aE.r)}">${aE.r==null?'—':aE.r.toFixed(1).replace('.',',')}</em></div><div class="tr-k"><span>Mouvements TC3</span><b>${trF(a3.mv)}</b><small>rendement portique</small><em class="${cl(a3.r)}">${a3.r==null?'—':a3.r.toFixed(1).replace('.',',')}</em></div><div class="tr-k"><span>Rendement global</span><b class="tr-v ${cl(all)}">${all.toFixed(1).replace('.',',')}</b><small>objectif ${obj}</small><em></em></div><div class="tr-k"><span>Arrêts TCE (min)</span><b>${trF(aE.ar)}</b><small>boîtes imp./exp.</small><em>${trF(aE.bi)} / ${trF(aE.be)}</em></div><div class="tr-k"><span>Arrêts TC3 (min)</span><b>${trF(a3.ar)}</b><small>boîtes imp./exp.</small><em>${trF(a3.bi)} / ${trF(a3.be)}</em></div><div class="tr-k"><span>Boîtes manutentionnées</span><b>${trF(aE.bi+aE.be+a3.bi+a3.be)}</b><small>import ${trF(aE.bi+a3.bi)}</small><em>export ${trF(aE.be+a3.be)}</em></div></div>`;
     { const tt=trTerm(), inf=perfInfo(P), terms=tt==='ALL'?['TCE','TC3']:[tt], R1=perfShifts(P,terms);
       if(R1.length){
@@ -779,8 +778,8 @@ function renderTraf(){
           if(G1.length){ const lg=x=>Object.assign({},x,{lab:x.lab+' ('+x.nj+' j)'});
             body+=`<h3 class="m-h">Classement des équipes · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité de chaque équipe, du meilleur au moins bon</b>${rankRows(G1.map(lg),cl,true,'Équipe')}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Équipes complètes (groupe TC3 + groupe TCE)</b>${rankRows(perfPairs(P),cl,true,'Équipe')}`:''}<p class="m-note" style="margin:8px 2px 0">Chaque journée est attribuée à l'équipe de service ce jour-là d'après la rotation hebdomadaire (S1 → S3 → S2 → S1) ; (n j) = jours travaillés dans le mois. Si les équipes ne sont pas les bonnes pour une période, corrigez la rotation ci-dessous.</p></section>${rotCard()}`; } }
         body+=`<h3 class="m-h">Classement des créneaux (shifts) · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité, du meilleur au moins bon</b>${rankRows(R1,cl,false)}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Détail par terminal et par shift</b>${rankRows(rankByTerminal(P),cl,true)}`:''}<p class="m-note" style="margin:8px 2px 0">Rendement = mouvements ÷ heures de portique (objectif ${obj}). Boîtes = import + export manutentionnés.${inf.partial?' Mois en cours : résultat provisoire, définitif en fin de mois.':''}</p><div class="m-date"><button type="button" class="m-up tr-btn" id="shPdf">Partager le classement en PDF (3 shifts)</button></div></section>`;
-        if(Pm.length>1){ const H=Pm.slice().sort((a,b)=>a.ym<b.ym?1:-1);
-          body+=`<section class="m-box"><b class="tr-h">Mois précédents · rendement par shift (${tt==='ALL'?'TCE + TC3':tt})</b><table class="tr-t"><thead><tr><th>Mois</th><th>S1</th><th>S2</th><th>S3</th><th>Meilleur</th></tr></thead><tbody>${H.map(p=>{ const r=perfShifts(p,terms), g=n=>{ const x=r.find(z=>z.s===n); return `<td class="tr-v ${cl(x&&x.r)}">${x?trR(x.r):'—'}</td>`; }; return `<tr><td>${esc(perfInfo(p).lab)}</td>${g(1)}${g(2)}${g(3)}<td><b>${r.length?'S'+r[0].s:'—'}</b></td></tr>`; }).join('')}</tbody></table></section>`; }
+        { const H=Pm.filter(x=>x.ym<=P.ym).sort((a,b)=>a.ym<b.ym?1:-1);
+          if(H.length>1) body+=`<section class="m-box"><b class="tr-h">Mois précédents · rendement par shift (${tt==='ALL'?'TCE + TC3':tt})</b><table class="tr-t"><thead><tr><th>Mois</th><th>S1</th><th>S2</th><th>S3</th><th>Meilleur</th></tr></thead><tbody>${H.map(p=>{ const r=perfShifts(p,terms), g=n=>{ const x=r.find(z=>z.s===n); return `<td class="tr-v ${cl(x&&x.r)}">${x?trR(x.r):'—'}</td>`; }; return `<tr><td>${esc(perfInfo(p).lab)}</td>${g(1)}${g(2)}${g(3)}<td><b>${r.length?'S'+r[0].s:'—'}</b></td></tr>`; }).join('')}</tbody></table></section>`; }
         window.__shPdf=()=>shareShiftPdf(P,Pm,obj); } }
     const rows=P.days.slice().map(d=>{ const e=d.TCE.tot||{mv:0,hbe:0,ar:0}, t=d.TC3.tot||{mv:0,hbe:0,ar:0}, r=(e.hbe+t.hbe)?(e.mv+t.mv)/(e.hbe+t.hbe):null; return `<tr><td>${trDay(d.d)}</td><td>${trF(e.mv)}</td><td>${trF(t.mv)}</td><td class="tr-v ${cl(r)}">${r==null?'—':r.toFixed(1).replace('.',',')}</td><td>${trF(e.ar+t.ar)}</td></tr>`; }).join('');
     body+=`<section class="m-box"><b class="tr-h">Jour par jour</b><table class="tr-t"><thead><tr><th>Jour</th><th>Mvts TCE</th><th>Mvts TC3</th><th>Rendt</th><th>Arrêts min</th></tr></thead><tbody>${rows}</tbody></table></section>`;
@@ -1139,7 +1138,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.39';
+const APP_V='7.41';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
