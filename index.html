@@ -617,7 +617,7 @@ function renderBilan(b){
   const sum=f=>M.reduce((a,m)=>a+(S.months[m][f]||0),0);
   const e1=sum('glE'), e0=sum('glE0'), p=trPct(e1,e0), kp=(t,f)=>{ const a=sum(f),c=sum(f+'0'),q=trPct(a,c); return `<div class="tr-k"><span>${t}</span><b>${trF(a)}</b><small>${y-1} : ${trF(c)}</small><em class="${trC(q)}">${trP(q)}</em></div>`; };
   const lbl=cur==='ALL'?'TCE + TC3':cur;
-  let h=`<h3 class="m-h">Bilan ${y} contre ${y-1} · ${lbl}</h3>${segHtml(cur,'traf')}`;
+  let h=`<h3 class="m-h">Bilan ${y} contre ${y-1} · ${lbl}</h3>`;
   h+=`<div class="tr-hero ${trC(p)}"><span>EVP global · janvier à ${TR_MOIS[lastM-1]} ${y}</span><b>${trF(e1)}</b><div>${y-1} (même période) : ${trF(e0)} EVP</div><strong>${trP(p)} · ${e1-e0>0?'+':e1-e0<0?'−':''}${trF(Math.abs(e1-e0))} EVP</strong></div>`;
   h+=`<div class="tr-kpi">${kp('Import (EVP)','impE')}${kp('Export plein (EVP)','expPE')}${kp('Export vide (EVP)','expVE')}${kp('Boîtes (global)','gl')}</div>`;
   /* ce qu'il faut pour egaler l'annee precedente */
@@ -637,6 +637,16 @@ function renderBilan(b){
   h+=`<p class="m-note">Source : fichier « Situation du Trafic Conteneur ${y}/${y-1} »${asof?' au '+asof.slice(8,10)+'/'+asof.slice(5,7)+'/'+asof.slice(0,4):''}. Le total TCE + TC3 est celui du fichier ; EVP = équivalents vingt pieds.</p>`;
   return h;
 }
+/* part d'un terminal dans l'EVP / les boîtes du même mois de l'an dernier (bilan mensuel) : sert à estimer le 2025 par terminal, absent du fichier quotidien */
+function trShare(b,term,ymd){
+  if(!b||+ymd.slice(0,4)!==b.year) return null; const m=+ymd.slice(5,7), t=b.T[term]&&b.T[term].y25&&b.T[term].y25[m], o=b.T.TOT&&b.T.TOT.y25&&b.T.TOT.y25[m];
+  return t&&o&&o.glE&&o.gl&&t.glE!=null&&t.gl!=null?{e:t.glE/o.glE,b:t.gl/o.gl}:null;
+}
+function trView(days,tt,b){ /* jours vus pour le terminal choisi ; null si l'estimation 2025 est impossible */
+  if(tt==='ALL') return days;
+  const m=days.map(d=>{ const sh=trShare(b,tt,d.d); if(!sh) return null; const g=d.gl; return {d:d.d,gl:{e:tt==='TCE'?g.eTcr:g.eTc3,e0:Math.round(g.e0*sh.e),b:tt==='TCE'?g.bTcr:g.bTc3,b0:Math.round(g.b0*sh.b)}}; });
+  return m.every(Boolean)?m:null;
+}
 function renderTraf(){
   if(!canDrv()){ tab='pilot'; render(); return; }   /* rubrique réservée aux comptes responsables (et administrateurs) */
   const app=$('#app'); document.body.classList.add('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
@@ -652,16 +662,18 @@ function renderTraf(){
   if(trSel){
     const isY=trSel[0]==='Y', key=trSel.slice(2), L=isY?T.filter(x=>x.ym.slice(0,4)===key):T.filter(x=>x.ym===key);
     const days=L.slice().sort((a,b)=>a.ym<b.ym?-1:1).flatMap(x=>x.days), last=days[days.length-1].d;
-    const g1=trSum(days,'gl','e'), g0=trSum(days,'gl','e0'), vg=trPct(g1,g0), nj=days.length;
+    const tt=trTerm(), B0=Bm[0], vd0=trView(days,tt,B0), est=tt!=='ALL'&&!!vd0, vd=vd0||days, noEst=tt!=='ALL'&&!vd0, lab=est?tt:'global';
+    const g1=trSum(vd,'gl','e'), g0=trSum(vd,'gl','e0'), vg=trPct(g1,g0), nj=vd.length, y0=est?'2025 (est.)':'2025';
     sub=(isY?'Cumul '+key:trMois(key))+' · au '+trDay(last)+' · '+nj+' jour'+(nj>1?'s':'')+' · comparé au même nombre de jours de 2025';
-    const kp=(t,a,b)=>{ const p=trPct(a,b); return `<div class="tr-k"><span>${t}</span><b>${trF(a)}</b><small>2025 : ${trF(b)}</small><em class="${trC(p)}">${trP(p)}</em></div>`; };
+    const kp=(t,a,b)=>{ const p=trPct(a,b); return `<div class="tr-k"><span>${t}</span><b>${trF(a)}</b><small>2025${est?' (est.)':''} : ${trF(b)}</small><em class="${trC(p)}">${trP(p)}</em></div>`; };
     const eT=trSum(days,'gl','eTcr'), e3=trSum(days,'gl','eTc3');
-    body+=`<div class="tr-hero ${trC(vg)}"><span>EVP global au ${trDay(last)}</span><b>${trF(g1)}</b><div>2025 : ${trF(g0)} EVP</div><strong>${trP(vg)} · ${g1-g0>0?'+':g1-g0<0?'−':''}${trF(Math.abs(g1-g0))} EVP</strong></div>`;
-    body+=`<div class="tr-kpi">${kp('Import (EVP)',trSum(days,'imp','e'),trSum(days,'imp','e0'))}${kp('Export plein (EVP)',trSum(days,'expP','e'),trSum(days,'expP','e0'))}${kp('Export vide (EVP)',trSum(days,'expV','e'),trSum(days,'expV','e0'))}${kp('Boîtes (global)',trSum(days,'gl','b'),trSum(days,'gl','b0'))}${kp('EVP par jour',g1/nj,g0/nj)}${kp('Boîtes par jour',trSum(days,'gl','b')/nj,trSum(days,'gl','b0')/nj)}</div>`;
-    body+=`<p class="m-note">Répartition 2026 des EVP : TCE (TCR dans le fichier) ${trF(eT)} · TC3 ${trF(e3)} (comparaison avec 2025 par terminal : voir le bilan mensuel ci-dessus).</p>`;
-    body+=`<section class="m-box"><b class="tr-h">Cumul EVP : 2026 (trait plein) contre 2025 (pointillé)</b>${trLine(days)}</section>`;
-    body+=`<section class="m-box"><b class="tr-h">Jour par jour (EVP global)</b><table class="tr-t"><thead><tr><th>Jour</th><th>2026</th><th>2025</th><th>Écart</th></tr></thead><tbody>${days.map(d=>{ const p=trPct(d.gl.e,d.gl.e0); return `<tr><td>${trDay(d.d)}</td><td>${trF(d.gl.e)}</td><td>${trF(d.gl.e0)}</td><td class="tr-v ${trC(p)}">${trP(p)}</td></tr>`; }).join('')}<tr class="tr-tot"><td><b>Cumul</b></td><td><b>${trF(g1)}</b></td><td><b>${trF(g0)}</b></td><td class="tr-v ${trC(vg)}"><b>${trP(vg)}</b></td></tr></tbody></table></section>`;
-    if(years.length&&T.length>1){ body+=`<section class="m-box"><b class="tr-h">Mois reçus</b><table class="tr-t"><thead><tr><th>Mois</th><th>EVP 2026</th><th>EVP N-1</th><th>Écart</th></tr></thead><tbody>${T.map(x=>{ const a=trSum(x.days,'gl','e'), b=trSum(x.days,'gl','e0'), p=trPct(a,b); return `<tr><td>${trMois(x.ym)}</td><td>${trF(a)}</td><td>${trF(b)}</td><td class="tr-v ${trC(p)}">${trP(p)}</td></tr>`; }).join('')}</tbody></table></section>`; }
+    if(noEst) body+=`<p class="m-note m-w">Comparaison avec 2025 par terminal impossible : importez d'abord le fichier « Situation du Trafic Conteneur ${days[0].d.slice(0,4)}/${days[0].d.slice(0,4)-1} » (bilan mensuel). Affichage de l'ensemble TCE + TC3.</p>`;
+    body+=`<div class="tr-hero ${trC(vg)}"><span>EVP ${lab} au ${trDay(last)}</span><b>${trF(g1)}</b><div>2025${est?' (estimé)':''} : ${trF(g0)} EVP</div><strong>${trP(vg)} · ${g1-g0>0?'+':g1-g0<0?'−':''}${trF(Math.abs(g1-g0))} EVP</strong></div>`;
+    body+=`<div class="tr-kpi">${est?'':kp('Import (EVP)',trSum(days,'imp','e'),trSum(days,'imp','e0'))+kp('Export plein (EVP)',trSum(days,'expP','e'),trSum(days,'expP','e0'))+kp('Export vide (EVP)',trSum(days,'expV','e'),trSum(days,'expV','e0'))}${kp('Boîtes ('+lab+')',trSum(vd,'gl','b'),trSum(vd,'gl','b0'))}${kp('EVP par jour',g1/nj,g0/nj)}${kp('Boîtes par jour',trSum(vd,'gl','b')/nj,trSum(vd,'gl','b0')/nj)}</div>`;
+    body+=est?`<p class="m-note">2026 : chiffres réels du terminal ${tt} (colonne ${tt==='TCE'?'TCR':'TC3'} du fichier). 2025 par terminal : <b>estimation</b>, car le fichier quotidien ne donne 2025 que pour l'ensemble ; elle applique à chaque jour la part de ${tt} dans le trafic du même mois de 2025 (bilan mensuel). Le détail import / export plein / export vide n'existe que pour l'ensemble des terminaux.</p>`:`<p class="m-note">Répartition 2026 des EVP : TCE (TCR dans le fichier) ${trF(eT)} · TC3 ${trF(e3)}. Choisissez TCE ou TC3 en haut de la page pour voir chaque terminal séparément.</p>`;
+    body+=`<section class="m-box"><b class="tr-h">Cumul EVP${est?' '+tt:''} : 2026 (trait plein) contre 2025 (pointillé)</b>${trLine(vd)}</section>`;
+    body+=`<section class="m-box"><b class="tr-h">Jour par jour (EVP ${lab})</b><table class="tr-t"><thead><tr><th>Jour</th><th>2026</th><th>${y0}</th><th>Écart</th></tr></thead><tbody>${vd.map(d=>{ const p=trPct(d.gl.e,d.gl.e0); return `<tr><td>${trDay(d.d)}</td><td>${trF(d.gl.e)}</td><td>${trF(d.gl.e0)}</td><td class="tr-v ${trC(p)}">${trP(p)}</td></tr>`; }).join('')}<tr class="tr-tot"><td><b>Cumul</b></td><td><b>${trF(g1)}</b></td><td><b>${trF(g0)}</b></td><td class="tr-v ${trC(vg)}"><b>${trP(vg)}</b></td></tr></tbody></table></section>`;
+    if(years.length&&T.length>1){ body+=`<section class="m-box"><b class="tr-h">Mois reçus (${lab})</b><table class="tr-t"><thead><tr><th>Mois</th><th>EVP 2026</th><th>EVP N-1</th><th>Écart</th></tr></thead><tbody>${T.map(x=>{ const v=trView(x.days,noEst?'ALL':tt,B0)||x.days, a=trSum(v,'gl','e'), b=trSum(v,'gl','e0'), p=trPct(a,b); return `<tr><td>${trMois(x.ym)}</td><td>${trF(a)}</td><td>${trF(b)}</td><td class="tr-v ${trC(p)}">${trP(p)}</td></tr>`; }).join('')}</tbody></table></section>`; }
   }
   /* performance d'exploitation du mois (rapport journalier) */
   const ymP=trSel&&trSel[0]==='M'?trSel.slice(2):(Pm.sort((a,b)=>a.ym<b.ym?1:-1)[0]||{}).ym, P=Pm.find(x=>x.ym===ymP);
@@ -678,7 +690,7 @@ function renderTraf(){
     body+=`<section class="m-box"><b class="tr-h">Navires du mois (par mouvements)</b><table class="tr-t"><thead><tr><th>Navire</th><th>Term.</th><th>Mvts</th><th>Rendt</th><th>Arrêts</th></tr></thead><tbody>${top.map(o=>{ const r=o.h?o.mv/o.h:null; return `<tr><td>${esc(o.v)}</td><td>${o.t}</td><td>${trF(o.mv)}</td><td class="tr-v ${cl(r)}">${r==null?'—':r.toFixed(1).replace('.',',')}</td><td>${trF(o.ar)}</td></tr>`; }).join('')}</tbody></table></section>`;
     body+=`<p class="m-note">Le rapport de performance compte des mouvements de portique (par shift et par navire) ; le rapport de trafic compte des boîtes et des EVP par jour. Les deux bases sont différentes : ne pas les comparer entre elles.</p>`;
   }
-  app.innerHTML=mTop('Trafic · comparaison avec 2025',sub,false,true)+`<div class="m-body">${imp}${BL}${opts.length&&BL?'<h3 class="m-h">Suivi quotidien (rapport « Trafic Quotidien »)</h3>':''}${opts.length?`<div class="m-date"><select id="trSel" aria-label="Période">${opts.map(o=>`<option value="${o[0]}" ${o[0]===trSel?'selected':''}>${o[1]}</option>`).join('')}</select></div>`:''}${body}</div>`;
+  app.innerHTML=mTop('Trafic · comparaison avec 2025',sub,false,true)+`<div class="m-body">${imp}${segHtml(trTerm(),'traf')}${BL}${opts.length&&BL?'<h3 class="m-h">Suivi quotidien · '+(trTerm()==='ALL'?'TCE + TC3':trTerm())+'</h3>':''}${opts.length?`<div class="m-date"><select id="trSel" aria-label="Période">${opts.map(o=>`<option value="${o[0]}" ${o[0]===trSel?'selected':''}>${o[1]}</option>`).join('')}</select></div>`:''}${body}</div>`;
   bind();
 }
 
@@ -1027,7 +1039,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.33';
+const APP_V='7.34';
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
   return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };

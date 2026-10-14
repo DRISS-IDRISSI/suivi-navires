@@ -224,6 +224,12 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.34 — Trafic : chaque terminal séparément
+- Le sélecteur TCE | TC3 | TCE+TC3 est maintenant en haut de l'écran Trafic et pilote tout : bilan mensuel ET suivi quotidien.
+- Suivi quotidien par terminal : cumul EVP, graphique, tableau « jour par jour » avec ligne Cumul, mois reçus. 2026 = chiffres réels du terminal (colonnes TCR = TCE et TC3 du fichier).
+- 2025 par terminal = ESTIMATION (le fichier quotidien ne donne 2025 que pour l'ensemble) : chaque jour reçoit la part du terminal dans le trafic du même mois de 2025, tirée du bilan mensuel. Sans bilan importé, l'application affiche l'ensemble et le signale.
+- Le détail import / export plein / export vide reste global (le fichier ne le donne pas par terminal).
+
 ## v7.33 — Trafic réservé aux responsables
 - La rubrique Trafic (comparaison avec 2025, bilan mensuel, performance d'exploitation) n'apparaît plus que pour les comptes Responsable et Administrateur. Les comptes Lecture ne la voient ni dans le menu ni dans les onglets.
 - Protection côté base : relancer SUPABASE_table_monthly.sql pour que la table monthly refuse toute lecture aux comptes Lecture (sinon la rubrique est seulement masquée).
