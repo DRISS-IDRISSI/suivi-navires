@@ -413,7 +413,13 @@ function parsePerfDay(R) {
     for (let k = r + 1; k < R.length; k++) {
       const row = R[k], c5 = sTxt(row[5]), c4 = sTxt(row[4]);
       if (c5 === "TOTAL" || c4 === "TOTAL") {
-        blk.tot = totRow(row);
+        // si la ligne TOTAL du fichier ne reprend pas toutes les lignes navire (plage de somme incomplete), on s'appuie sur les lignes navire
+        const T = totRow(row), sm = (k) => blk.lines.reduce((a, l) => a + (l[k] || 0), 0);
+        if (blk.lines.length && Math.abs(sm("mv") - T.mv) > 0.5) {
+          T.mv = sm("mv"); T.bi = sm("bi"); T.be = sm("be"); T.hbe = sm("hbe"); T.hbn = sm("hbn"); T.eq = sm("eq"); T.ar = sm("ar");
+          T.rq = T.hbe ? T.mv / T.hbe : 0; T.rn = T.hbn ? T.mv / T.hbn : 0;
+        }
+        blk.tot = T;
         break;
       }
       // ligne de total dont le libelle est mal place (ex. nom de navire en colonne E, rien en colonne F) : ce n'est pas une ligne navire (sinon double comptage)
@@ -1140,7 +1146,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.44';
+const APP_V='7.45';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
