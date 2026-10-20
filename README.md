@@ -224,6 +224,12 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.44 — Correction de la lecture du rapport de performance (équipes)
+- **Libellés de shift** : « 1eSh » (sans espace) n'était pas reconnu au TCE, donc une grande partie des mouvements du TCE n'était attribuée à aucun shift ni équipe (septembre : environ 4 800 mouvements) → jours et totaux TCE par équipe faux.
+- **Lignes de total** mal libellées (« TOT3e » sans espace, nom de navire en colonne E) lues comme des lignes de navire → mouvements du TC3 comptés deux fois (septembre : environ 2 600 mouvements en trop).
+- Contrôle sur septembre : les totaux de l'application égalent maintenant les lignes « TOTAL » de chaque journée du fichier. Deux écarts viennent du fichier lui-même : le 02/09 (TC3, S2) une ligne de 62 mouvements est hors de la ligne de total, et ses feuilles de semaine / « Planning des équipes » omettent les totaux mal libellés.
+- Fonction Edge `ingest-report` v11 (même correction). **Il faut ré-importer le rapport de septembre (et octobre)** : les données déjà enregistrées gardent l'ancienne lecture.
+
 ## v7.43 — Jours d'activité des équipes
 - Dans le classement des équipes, « (27/30 j) » = jours avec mouvements / jours du mois. Chaque équipe est de service tous les jours (shift de la semaine) ; l'écart vient des shifts où aucun navire n'était à quai.
 
