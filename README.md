@@ -224,6 +224,12 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.47 — Détail par semaine et par shift
+- Écran Trafic > Performance d'exploitation : nouveau tableau « Détail par semaine » par terminal (lignes = semaines du mois, colonnes = S1 / S2 / S3, chaque case = équipe de rotation + mouvements). Permet de vérifier d'où vient l'écart entre deux équipes : quel shift (le S3 de nuit produit moins) l'équipe a tenu, pendant quelles semaines.
+
+## v7.46 — EVP dans le classement des équipes
+- Colonne « EVP* » ajoutée aux classements des équipes (écran et PDF). Le rapport de performance ne donne pas les 20'/40' : l'EVP est **estimé** = boîtes de l'équipe × EVP par boîte du terminal le jour concerné, tiré du rapport « Trafic Quotidien » du même mois (TCE = colonne TCR, TC3). Sans rapport de trafic du mois, la colonne n'apparaît pas.
+
 ## v7.45 — Totaux du mois cohérents avec le classement des équipes
 - Si la ligne TOTAL d'une journée du fichier ne reprend pas toutes les lignes navire (plage de somme incomplète), l'application recalcule le total du jour à partir des lignes navire. Les cartes « Mouvements TCE / TC3 », le tableau « Jour par jour » et le classement des équipes donnent ainsi le même total (septembre : 51 449 mouvements, que l'on importe le fichier d'origine ou le fichier corrigé).
 - Fonction Edge `ingest-report` v12 (même règle). Ré-importer le rapport du mois après mise à jour.
