@@ -224,6 +224,11 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.48 — 3e shift du dimanche hors équipes
+- Le 3e shift (23h–07h) de la journée du dimanche n'est attribué à aucune équipe : il apparaît sur une ligne séparée « S3 DIMANCHE (hors équipe) » (toujours en dernier) dans le classement des équipes TC3 / TCE, les équipes complètes, le classement des shifts, le détail par terminal, le PDF et le tableau « Détail par semaine » (colonne dédiée).
+- Les totaux restent identiques (somme des lignes = total du mois). Le S3 « normal » et la colonne « Meilleur » de l'historique n'incluent plus ce S3 du dimanche.
+- Hypothèse : « dimanche » = journée dont l'onglet du rapport est daté d'un dimanche.
+
 ## v7.47 — Détail par semaine et par shift
 - Écran Trafic > Performance d'exploitation : nouveau tableau « Détail par semaine » par terminal (lignes = semaines du mois, colonnes = S1 / S2 / S3, chaque case = équipe de rotation + mouvements). Permet de vérifier d'où vient l'écart entre deux équipes : quel shift (le S3 de nuit produit moins) l'équipe a tenu, pendant quelles semaines.
 
