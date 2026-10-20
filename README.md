@@ -224,6 +224,15 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.43 — Jours d'activité des équipes
+- Dans le classement des équipes, « (27/30 j) » = jours avec mouvements / jours du mois. Chaque équipe est de service tous les jours (shift de la semaine) ; l'écart vient des shifts où aucun navire n'était à quai.
+
+## v7.42 — Surveillance de la réception automatique des e-mails
+- La fonction Edge `mailbox` v8 écrit son état à chaque passage (ligne `MBX:STATUS` de `escale_meta`) : heure de la relève, erreur éventuelle, date du dernier mail reçu. Un mail illisible ne bloque plus les suivants.
+- L'application (responsables/admin) affiche un bandeau orange sur l'écran Direction si la relève est arrêtée depuis plus de 20 minutes, si elle est en erreur (message exact) ou si aucun mail n'est arrivé depuis plus de 2 h 30. La ligne de diagnostic en bas indique aussi l'heure de la dernière relève.
+- `SUPABASE_verifier_tache_mailbox.sql` : requêtes de contrôle (lecture seule) de la tâche planifiée `poll-mailbox`.
+- Si la connexion Microsoft a expiré : relancer `mailbox?action=start` puis `action=finish` (connexion avec marsamaroc.CES@outlook.fr).
+
 ## v7.41 — PDF : classement des équipes uniquement
 - Le PDF ne contient plus le tableau « Classement des shifts (créneaux) » : équipes TC3, TCE, équipes complètes, rotation, puis comparatif des mois précédents. Le classement des créneaux reste visible à l'écran.
 

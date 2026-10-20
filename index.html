@@ -570,7 +570,7 @@ function parseBilan(wb, sheetRows) {
   return { kind: "bilan", id: "bilan-" + year, year, last: `${year}-${String(last).padStart(2, "0")}`, asof, T, ds };
 }
 const gridRows=ws=>{ const e=XLSX.utils.decode_range(ws['!ref']||'A1').e; return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:'',range:{s:{r:0,c:0},e}}); };
-let mon={}, monLoaded=false, trSel=null, pmSel=null;
+let mon={}, monLoaded=false, trSel=null, pmSel=null, MBX=null;
 async function loadMonthly(){
   if(!canDrv()){ mon={}; monLoaded=true; return; }
   const r=await sb.from('monthly').select('id,data'); let o={};
@@ -775,8 +775,8 @@ function renderTraf(){
     { const tt=trTerm(), inf=perfInfo(P), terms=tt==='ALL'?['TCE','TC3']:[tt], R1=perfShifts(P,terms);
       if(R1.length){
         { const G1=perfGroups(P,terms);
-          if(G1.length){ const lg=x=>Object.assign({},x,{lab:x.lab+' ('+x.nj+' j)'});
-            body+=`<h3 class="m-h">Classement des équipes · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité de chaque équipe, du meilleur au moins bon</b>${rankRows(G1.map(lg),cl,true,'Équipe')}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Équipes complètes (groupe TC3 + groupe TCE)</b>${rankRows(perfPairs(P),cl,true,'Équipe')}`:''}<p class="m-note" style="margin:8px 2px 0">Chaque journée est attribuée à l'équipe de service ce jour-là d'après la rotation hebdomadaire (S1 → S3 → S2 → S1) ; (n j) = jours travaillés dans le mois. Si les équipes ne sont pas les bonnes pour une période, corrigez la rotation ci-dessous.</p></section>${rotCard()}`; } }
+          if(G1.length){ const lg=x=>Object.assign({},x,{lab:x.lab+' ('+x.nj+'/'+P.days.length+' j)'});
+            body+=`<h3 class="m-h">Classement des équipes · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité de chaque équipe, du meilleur au moins bon</b>${rankRows(G1.map(lg),cl,true,'Équipe')}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Équipes complètes (groupe TC3 + groupe TCE)</b>${rankRows(perfPairs(P),cl,true,'Équipe')}`:''}<p class="m-note" style="margin:8px 2px 0">Chaque journée est attribuée à l'équipe de service ce jour-là d'après la rotation hebdomadaire (S1 → S3 → S2 → S1) . (a/b j) = jours avec mouvements / jours du mois : chaque équipe est de service tous les jours sur le shift de la semaine, mais un shift sans navire à quai ne produit aucun mouvement, d'où des écarts surtout au TCE. Si les équipes ne sont pas les bonnes pour une période, corrigez la rotation ci-dessous.</p></section>${rotCard()}`; } }
         body+=`<h3 class="m-h">Classement des créneaux (shifts) · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité, du meilleur au moins bon</b>${rankRows(R1,cl,false)}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Détail par terminal et par shift</b>${rankRows(rankByTerminal(P),cl,true)}`:''}<p class="m-note" style="margin:8px 2px 0">Rendement = mouvements ÷ heures de portique (objectif ${obj}). Boîtes = import + export manutentionnés.${inf.partial?' Mois en cours : résultat provisoire, définitif en fin de mois.':''}</p><div class="m-date"><button type="button" class="m-up tr-btn" id="shPdf">Partager le classement en PDF (3 shifts)</button></div></section>`;
         { const H=Pm.filter(x=>x.ym<=P.ym).sort((a,b)=>a.ym<b.ym?1:-1);
           if(H.length>1) body+=`<section class="m-box"><b class="tr-h">Mois précédents · rendement par shift (${tt==='ALL'?'TCE + TC3':tt})</b><table class="tr-t"><thead><tr><th>Mois</th><th>S1</th><th>S2</th><th>S3</th><th>Meilleur</th></tr></thead><tbody>${H.map(p=>{ const r=perfShifts(p,terms), g=n=>{ const x=r.find(z=>z.s===n); return `<td class="tr-v ${cl(x&&x.r)}">${x?trR(x.r):'—'}</td>`; }; return `<tr><td>${esc(perfInfo(p).lab)}</td>${g(1)}${g(2)}${g(3)}<td><b>${r.length?'S'+r[0].s:'—'}</b></td></tr>`; }).join('')}</tbody></table></section>`; }
@@ -843,19 +843,19 @@ async function loadSnaps(retry){
   const dr=!canDrv()?{error:1}:await sb.from('driver_shift').select('data').order('ts',{ascending:false}).limit(30);
   const dd=dr.error?[]:dr.data.map(r=>r.data).reverse();
   /* postes a quai saisis par l'utilisateur (table escale_meta ; a defaut, memoire de cet appareil) */
-  const mr=await sb.from('escale_meta').select('visit,poste,updated_at'); let mt={}, cm={}, dp={}, gtv=null, rotv=null;
-  const ap=(k,val,ts)=>{ if(k==='CFG:GT'){ gtv=val?+val:null; } else if(k==='CFG:ROT'){ try{ const o=JSON.parse(val); rotv=o&&o.ref&&o.TC3&&o.TCE?o:null; }catch(e){ rotv=null; } } else if(/^DEP:/.test(k)){ if(val) dp[k.slice(4)]=ts||1; else delete dp[k.slice(4)]; } else if(/^CRANE:/.test(k)){ if(val){ const q=val.split('|'); cm[k.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:ts||0}; } else delete cm[k.slice(6)]; } else { if(val) mt[k]=val; else delete mt[k]; } };
+  const mr=await sb.from('escale_meta').select('visit,poste,updated_at'); let mt={}, cm={}, dp={}, gtv=null, rotv=null, mbv=null;
+  const ap=(k,val,ts)=>{ if(k==='CFG:GT'){ gtv=val?+val:null; } else if(k==='MBX:STATUS'){ try{ mbv=JSON.parse(val); }catch(e){ mbv=null; } } else if(k==='CFG:ROT'){ try{ const o=JSON.parse(val); rotv=o&&o.ref&&o.TC3&&o.TCE?o:null; }catch(e){ rotv=null; } } else if(/^DEP:/.test(k)){ if(val) dp[k.slice(4)]=ts||1; else delete dp[k.slice(4)]; } else if(/^CRANE:/.test(k)){ if(val){ const q=val.split('|'); cm[k.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:ts||0}; } else delete cm[k.slice(6)]; } else { if(val) mt[k]=val; else delete mt[k]; } };
   if(!mr.error) mr.data.forEach(r=>{ if(r.poste) ap(r.visit,r.poste,Date.parse(r.updated_at)||0); });
   pendMigrate();
   /* modifications faites sur cet appareil et pas encore enregistrees sur le serveur : elles restent visibles et sont renvoyees */
   { const pd=pendGet(); Object.keys(pd).forEach(k=>ap(k,pd[k].v,pd[k].ts)); if(!mr.error&&Object.keys(pd).length) pendFlush(); }
   if(gtv>0&&gtv<=80) GT=gtv;
-  ROT=rotv||ROT_DEFAULT;
+  ROT=rotv||ROT_DEFAULT; MBX=mbv;
   meta=mt; cman=cm; depM=dp;
   { const sr=await sb.from('situation').select('data').order('ts',{ascending:false}).limit(1); let sx=null;
     if(!sr.error&&sr.data&&sr.data.length) sx=sr.data[0].data; else { try{ sx=JSON.parse(localStorage.getItem('situation')||'null'); }catch(e){} }
     sit=sx; }
-  const sig=JSON.stringify(meta)+'S'+(sit?sit.id:'')+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
+  const sig=JSON.stringify(meta)+'B'+(mbv?mbv.t:'')+'S'+(sit?sit.id:'')+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
   if(sig===lastSig) return; lastSig=sig;
   hours=hd; rtgs=rd; drivers=dd; if(!drvKey||!dd.some(x=>x.id===drvKey)) drvKey=dd.length?dd[dd.length-1].id:null; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
 }
@@ -1138,9 +1138,16 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.41';
+const APP_V='7.43';
+const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
+/* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
+const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
+  if(!(age<=20)) m='Réception automatique des e-mails arrêtée : dernière relève de la boîte le '+mbxHM(MBX.t)+'. Vérifier la fonction « mailbox » et sa tâche planifiée dans Supabase.';
+  else if(!MBX.ok||MBX.err) m='Réception des e-mails en erreur : '+esc(String(MBX.err||'erreur inconnue').slice(0,200));
+  else if(rec!=null&&rec>150) m='La boîte est lue normalement mais aucun nouveau mail avec pièce jointe depuis le '+mbxHM(MBX.dernier_recu)+' : vérifier l\'envoi des rapports vers la boîte.';
+  return m?`<div class="d-warn">${m}</div>`:''; };
 const diagLine=()=>{ const h=lastHour(), sn=lastSnap(), f=x=>x?String(x.id).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,'$3/$2 $4:$5'):'aucun'; const nv=h?h.cranes.filter(c=>c.visit).length:0;
-  return `Version ${APP_V} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
+  return `Version ${APP_V}${MBX&&canDrv()?' · boîte mail : relève '+mbxHM(MBX.t)+(MBX.ok&&!MBX.err?' (OK)':' (erreur)')+', dernier mail '+mbxHM(MBX.dernier_recu):''} · dernier rapport horaire en base : ${f(h)} (${h?(h.cranes.some(c=>'visit' in c)?'nouveau format, '+nv+' portique(s) avec navire':'ancien format, sans navire'):'—'}) · dernier rapport de shift : ${f(sn)}`; };
 const hcr=id=>{ const h=lastHour(); if(!h) return null; const c=h.cranes.find(z=>z.id===id); return c&&c.visit?c:null; };
 async function setCrane(id){
   const m=manFor(id), cur=m?m.vessel:'', v=prompt("Navire actuellement servi par "+id+" (ex. : MIMMI SCHULTE).\nTapez - si ce portique ne travaille sur aucun navire.\nLaisser vide pour revenir à l'information du rapport.",cur);
@@ -1573,7 +1580,7 @@ function renderDir(){
   const group=g=>`<h3 class="m-h">${g.t==='TC3'?'TC3 · portiques STS':'TCE · portiques PT'}</h3><div class="d-grid">${g.ids.map(id=>card(R[id])).join('')}</div>
     <div class="d-tot"><div class="m-two">${SC.map((c,i)=>{ const x=tot(g.ids,i); return `<div><b>${nv(x)}</b><span>Total ${c}</span></div>`; }).join('')}</div></div>`;
   app.innerHTML=mTop('Direction · '+(groups.length>1?'TCE + TC3':groups[0].t),sub,false,true)+
-   `<div class="m-body">${segHtml(dsel,'dir')}${age!=null&&age>100?`<div class="d-warn">Dernier rapport horaire reçu il y a ${Math.round(age/60)} h : les chiffres « dernière heure » ne sont plus d'actualité.</div>`:''}
+   `<div class="m-body">${segHtml(dsel,'dir')}${age!=null&&age>100?`<div class="d-warn">Dernier rapport horaire reçu il y a ${Math.round(age/60)} h : les chiffres « dernière heure » ne sont plus d'actualité.</div>`:''}${mbxWarn()}
     <div class="m-kpi">${kp(nOp,'portiques en opération')}${kp(h?fmt(sumLast):'—','mvts dernière heure')}${kp(h&&nOp?fmt(sumLast/nOp,1):'—','moy. / portique')}</div>
     <div class="m-kpi">${SC.map((c,i)=>kp(nv(T[i]),c+(D.live&&D.live.code===c?' · en cours':''))).join('')}</div>
     <p class="m-note" style="margin:2px 2px 8px">Journée du ${day?dayLab(day):'—'} · ${TJ==null?'—':fmt(TJ)} mouvements (S1 07–15 · S2 15–23 · S3 23–07)</p>
