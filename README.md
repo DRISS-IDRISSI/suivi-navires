@@ -224,6 +224,25 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.52 — PDF : page « Trafic par compagnie maritime » + affichage téléphone
+- Le PDF du classement a maintenant 2 pages : page 1 = classement des équipes (inchangée) ; page 2 = trafic par armateur et par consignataire du mois choisi (mouvements, part, boîtes, EVP estimé, rendement, navires), même total que page 1.
+- Téléphone : le tableau du classement des équipes tient dans l'écran (plus de défilement à droite) ; le nombre de jours passe sous le nom de l'équipe ; la ligne « S3 DIMANCHE » indique « hors équipe » en dessous.
+
+## v7.51 — Armateur / consignataire d'après le fichier « Situation »
+- Le tableau « Trafic par compagnie maritime » prend l'armateur (et le consignataire) de chaque navire dans le fichier « Situation » (prévisions des navires). Choix « Armateur | Consignataire » au-dessus du tableau.
+- Mémoire : à chaque situation reçue (e-mail ou import), l'application enregistre l'armateur et le consignataire des navires dans la table `monthly` (id `armateurs`, partagée). Les mois passés se complètent donc au fil des situations. Départ : les 32 navires de la situation du 08/10/2026.
+- Ordre de priorité : choix manuel (« Classer les navires ») > situation > recherche Internet > nom du navire. Fautes de frappe du rapport de performance reconnues (EL BWINTER, AS PATRONIA, AC CONSTANTINA). Les navires MSC sont rattachés au consignataire MSC MAROC.
+- Aucune fonction Edge à redéployer ; compte admin / responsable requis pour l'enregistrement.
+
+## v7.50 — Compagnies : navires recherchés sur Internet
+- CIELO DI RABAT passe de MSC à MAERSK (confirmé). Compagnie par défaut ajoutée pour 14 noms de navires (AS PETRONIA = Maersk, IONIKOS et CORELLI = Hapag-Lloyd, MONTPELLIER / AS CONSTANTINA / MIMMI SCHULTE = Cosco, PIRITA = CMA CGM, ELBWINTER = Unifeeder, ECO PONENTE = X-Press Feeders). Source : sites de suivi des navires ; un navire affrété peut changer de ligne, donc corrigeable avec « Classer les navires ».
+- Restent « Non classé » : BILBAO TRADER, PAGE, ANDREA (sert plusieurs lignes), TOES.
+
+## v7.49 — Trafic par compagnie maritime
+- Écran Trafic > Performance d'exploitation : nouveau tableau « Trafic par compagnie maritime » (sélecteur de mois et de terminal TCE / TC3 / TCE+TC3) : mouvements, part %, boîtes, EVP estimé, rendement, nombre de navires et leurs noms. Total identique au classement des équipes.
+- Le rapport de performance ne donne pas la compagnie : elle est déduite du nom du navire (MSC…, CIELO DI…, MAERSK…, HMM…, CONTSHIP / WEC = CMA CGM, X-PRESS…, noms en « … A » et TANGER / CASABLANCA = Arkas). Les autres sont « Non classé ».
+- Bouton « Classer les navires par compagnie » (comptes avec droit de saisie) : choix de la compagnie navire par navire ; le choix est partagé (table escale_meta, clés `LINE:NOM DU NAVIRE`) et s'applique à tous les mois. Champ vide = retour à la compagnie déduite du nom.
+
 ## v7.48 — 3e shift du dimanche hors équipes
 - Le 3e shift (23h–07h) de la journée du dimanche n'est attribué à aucune équipe : il apparaît sur une ligne séparée « S3 DIMANCHE (hors équipe) » (toujours en dernier) dans le classement des équipes TC3 / TCE, les équipes complètes, le classement des shifts, le détail par terminal, le PDF et le tableau « Détail par semaine » (colonne dédiée).
 - Les totaux restent identiques (somme des lignes = total du mois). Le S3 « normal » et la colonne « Meilleur » de l'historique n'incluent plus ce S3 du dimanche.

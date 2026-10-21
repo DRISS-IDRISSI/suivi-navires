@@ -225,7 +225,7 @@ body.mobpilot .wrap{padding-inline:0;padding-block:0 24px;max-width:560px}
 .tr-kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px}.tr-k{background:var(--bg2);border-radius:12px;padding:8px 10px;text-align:center}.tr-k span{display:block;font-size:12px;color:#5b6f8f}.tr-k b{display:block;font-size:22px;font-family:var(--f-display);color:#1f3a6e}.tr-k small{display:block;font-size:12px;color:#6b7c93}.tr-k em{font-style:normal;font-weight:700;font-size:14px}
 .tr-k em.g,.tr-v.g{color:#12805c}.tr-k em.c,.tr-v.c{color:#b3261e}.tr-k em.w,.tr-v.w{color:#a86a00}.tr-v{font-weight:700}
 .tr-h{display:block;margin-bottom:6px;color:#1f3a6e}.tr-svg{width:100%;height:auto;display:block}
-.tr-t{width:100%;border-collapse:collapse;font-size:13px}.tr-t th{font-weight:600;color:#5b6f8f;text-align:right;padding:4px 4px;border-bottom:1px solid #d6dce1}.tr-t td{text-align:right;padding:5px 4px;border-bottom:1px solid #eef1f4}.tr-t th:first-child,.tr-t td:first-child{text-align:left}
+.tr-t{width:100%;border-collapse:collapse;font-size:13px}.tr-t th{font-weight:600;color:#5b6f8f;text-align:right;padding:4px 4px;border-bottom:1px solid #d6dce1}.tr-t td{text-align:right;padding:5px 4px;border-bottom:1px solid #eef1f4}.tr-t th:first-child,.tr-t td:first-child{text-align:left;white-space:normal;overflow-wrap:anywhere}.m-box{overflow-x:auto}.tr-r{font-size:12px}.tr-r th,.tr-r td{padding:5px 2px}.tr-r th:nth-child(2),.tr-r td:nth-child(2){text-align:left;max-width:104px}@media(max-width:400px){.tr-r{font-size:11.5px}.tr-r th{font-size:10.5px}}.tr-r th:first-child,.tr-r td:first-child{width:14px}
 tr.tr-tot td{border-top:2px solid #1f3a6e;background:#eef2f8}
 button.tr-btn{width:100%;padding:12px;border-radius:14px;font-size:16px}
 table.tr-ds th,table.tr-ds td{font-size:13px;padding-left:4px;padding-right:4px}
@@ -584,7 +584,7 @@ async function loadMonthly(){
   const r=await sb.from('monthly').select('id,data'); let o={};
   if(!r.error&&r.data) r.data.forEach(x=>{ o[x.id]=x.data; });
   try{ const l=JSON.parse(localStorage.getItem('monthly')||'{}'); Object.keys(l).forEach(k=>{ if(!o[k]||(l[k].last||'')>(o[k].last||'')) o[k]=l[k]; }); }catch(e){}
-  mon=o; monLoaded=true;
+  mon=o; monLoaded=true; learnArm();
 }
 async function saveMonthly(m){
   if(m.kind==='bilan'&&!m.ds){ if(!monLoaded) await loadMonthly(); const o=mon[m.id]; if(o&&o.ds) m.ds=o.ds; }   /* le fichier mensuel sans feuille D.S ne doit pas effacer le délai de séjour déjà reçu */
@@ -658,8 +658,8 @@ const ymdMs=y=>Date.UTC(+y.slice(0,4),+y.slice(5,7)-1,+y.slice(8,10));
 const rotWeek=ymd=>Math.floor((ymdMs(ymd)-ymdMs(ROT.ref))/(7*864e5));
 /* équipe (identifiée par son shift à la semaine de référence : 1, 2 ou 3) qui travaille au shift sh pendant la semaine de la date ymd */
 function rotTeam(ymd,sh){ const w=rotWeek(ymd); for(const s0 of [1,2,3]){ if(ROT_CYC[(((ROT_CYC.indexOf(s0)+w)%3)+3)%3]===sh) return s0; } return null; }
-const rotName=(t,s0)=>s0==='D'?'S3 DIMANCHE (hors équipe)':String(((ROT[t]||{})[s0])||'?').toUpperCase();
-const rotPair=s0=>s0==='D'?'S3 DIMANCHE (hors équipe)':rotName('TC3',s0)+' + '+rotName('TCE',s0);
+const rotName=(t,s0)=>s0==='D'?'S3 DIMANCHE':String(((ROT[t]||{})[s0])||'?').toUpperCase();
+const rotPair=s0=>s0==='D'?'S3 DIMANCHE':rotName('TC3',s0)+' + '+rotName('TCE',s0);
 /* le 3e shift (23h–07h) de la journée du dimanche n'est attribué à aucune équipe : il est isolé sous la clé 'D' */
 const isSun=ymd=>new Date(ymdMs(ymd)).getUTCDay()===0;
 const sunS3=(ymd,sh)=>sh===3&&isSun(ymd);
@@ -693,6 +693,52 @@ function rotCard(){
   const nxt=new Date(ymdMs(t)+7*864e5).toISOString().slice(0,10);
   return `<section class="m-box"><b class="tr-h">Rotation des équipes · ${rotWeekLab(t)} (S1 → S3 → S2 → S1)</b><table class="tr-t"><thead><tr><th>Shift</th><th>TC3</th><th>TCE</th></tr></thead><tbody>${line(t)}</tbody></table><b class="tr-h" style="display:block;margin-top:10px">Semaine suivante (${rotWeekLab(nxt)})</b><table class="tr-t"><tbody>${line(nxt)}</tbody></table>${canDrv()?'<div class="m-date"><button type="button" class="m-up tr-btn" id="rotEdit">Modifier la rotation</button></div>':''}</section>`;
 }
+/* ---------- trafic par compagnie maritime : déduite du nom du navire (le rapport ne donne pas la compagnie), corrigeable et partagée ---------- */
+let LN={};
+const LINES=['MSC','MAERSK','ARKAS','CMA CGM','HAPAG-LLOYD','COSCO','ONE','HMM','EVERGREEN','X-PRESS FEEDERS','UNIFEEDER','YANG MING','AUTRE'], NOCL='Non classé';
+const shipKey=v=>String(v||'').toUpperCase().replace(/\s+/g,' ').trim();
+/* navires dont la compagnie a été recherchée (sites de suivi des navires) ; un navire affrété peut changer de ligne : à corriger au besoin avec « Classer les navires » */
+const SHIP_LINES={'CIELO DI RABAT':'MAERSK','AS PETRONIA':'MAERSK','AS PATRONIA':'MAERSK','PIRITA':'CMA CGM','IONIKOS':'HAPAG-LLOYD','CORELLI':'HAPAG-LLOYD','MONTPELLIER':'COSCO','AS CONSTANTINA':'COSCO','AC CONSTANTINA':'COSCO','MIMMI SCHULTE':'COSCO','ELBWINTER':'UNIFEEDER','EL BWINTER':'UNIFEEDER','ECO PONENTE':'X-PRESS FEEDERS','EC PONENTE':'X-PRESS FEEDERS'};
+const LINE_RULES=[[/^MSC\b/,'MSC'],[/MAERSK/,'MAERSK'],[/^HMM\b/,'HMM'],[/^CONTSHIP\b|^WEC\b|^CMA\b/,'CMA CGM'],[/^X-?PRESS\b/,'X-PRESS FEEDERS'],[/ A$|^(TANGER|CASABLANCA)\b/,'ARKAS']];
+const SEED_ARM={"MSC ERMINIA III":["MSC GENEVE","MSC MAROC"],"CIELO DI RABAT":["D'AMICO","PACOCEAN"],"MIMMI SCHULTE":["OOCL","NOATUM"],"ECO ZEPHYR":["MAERSK","AGL"],"CASABLANCA A":["ARKAS","ARKAS MAROC"],"AS CONSTANTINA":["COSCO","COSCO MAROC"],"GRANDE ANGOLA":["GRIMALDI","GLOBE MARINE"],"MSC MASHA 3":["MSC GENEVE","MSC MAROC"],"TANGER A":["ARKAS","ARKAS MAROC"],"X-PRESS SOUSSE":["XPRESS","AGL"],"MSC SARAH V":["MSC GENEVE","MSC MAROC"],"VERA A":["ARKAS","ARKAS MAROC"],"ELBWINTER":["MCI","GLOBAL CO AGENCY"],"GH FOEHN":["HAPAG",""],"MSC MOSS III":["MSC GENEVE","MSC MAROC"],"AS PETRONIA":["MAERSK","NOATUM"],"MSC MADISON II":["MSC GENEVE","MSC MAROC"],"GRANDE TOGO":["GRIMALDI","GLOBE MARINE"],"MAERSK NARMADA":["MAERSK","NOATUM"],"GRANDE ARGENTINA":["GRIMALDI","GLOBE MARINE"],"GRANDE BUENOS AIRES":["GRIMALDI","GLOBE MARINE"],"ATLANTIC GREEN":["XPRESS","AGL"],"GRANDE SIERRA LEONE":["GRIMALDI","GLOBE MARINE"],"MSC YANG R":["MSC GENEVE","MSC MAROC"],"MSC GIADA III":["MSC GENEVE","MSC MAROC"],"MAERSK NEWARK":["MAERSK","NOATUM"],"GRANDE LUANDA":["GRIMALDI","GLOBE MARINE"],"NORA MAERSK":["MAERSK","NOATUM"],"GRANDE GHANA":["GRIMALDI","GLOBE MARINE"],"GRANDE SENEGAL":["GRIMALDI","GLOBE MARINE"],"GREAT ANTWERP":["GRIMALDI","GLOBE MARINE"]};
+/* armateur / consignataire de chaque navire : fichier « Situation » (prévisions) ; chaque situation reçue complète la mémoire partagée (table monthly, id 'armateurs') */
+let lnMode='arm', armBusy=false;
+const armNorm=a=>{ a=String(a||'').replace(/\u00a0/g,' ').trim().toUpperCase(); if(!a) return ''; if(/^MSC\b/.test(a)) return 'MSC'; if(/^X-?PRESS/.test(a)) return 'X-PRESS FEEDERS'; if(/^HAPAG/.test(a)) return 'HAPAG-LLOYD'; return a; };
+const ARM_ALIAS={'EL BWINTER':'ELBWINTER','AS PATRONIA':'AS PETRONIA','AC CONSTANTINA':'AS CONSTANTINA'};   /* fautes de frappe courantes dans le rapport de performance */
+const armInfo=k0=>{ const k=ARM_ALIAS[k0]||k0, m=(mon['armateurs']||{}).ships||{}; const x=m[k]; if(x) return x; const y=SEED_ARM[k]; return y?{a:y[0],c:y[1]}:null; };
+async function learnArm(){ if(armBusy||!canDrv()||!monLoaded||!sit||!sit.vessels) return; armBusy=true;
+  try{ const doc=Object.assign({kind:'armateurs',ships:{}},mon['armateurs']||{}); doc.ships=Object.assign({},doc.ships); let ch=0;
+    sit.vessels.forEach(e=>{ const k=shipKey(e.name), a=String(e.armateur||'').trim().toUpperCase(), c=String(e.consignataire||'').trim().toUpperCase(); if(!k||!a) return; const o=doc.ships[k]; if(!o||o.a!==a||o.c!==c){ const sd=SEED_ARM[k]; if(!o&&sd&&sd[0]===a&&sd[1]===c) return; doc.ships[k]={a,c}; ch++; } });
+    if(ch){ doc.last=todayCasa(); const {error}=await sb.from('monthly').upsert({id:'armateurs',ts:new Date().toISOString(),data:doc}); if(!error){ mon['armateurs']=doc; } } }catch(e){} armBusy=false; }
+function shipLineAuto(v){ const k=shipKey(v); const ai=armInfo(k); if(ai&&ai.a) return armNorm(ai.a); if(SHIP_LINES[k]) return SHIP_LINES[k]; for(const r of LINE_RULES) if(r[0].test(k)) return r[1]; return NOCL; }
+const shipLine=v=>LN[shipKey(v)]||shipLineAuto(v);
+const shipCon=v=>{ const k=shipKey(v), ai=armInfo(k); return ai&&ai.c?ai.c:(/^MSC\b/.test(k)?'MSC MAROC':NOCL); };
+const shipGrp=v=>lnMode==='con'?shipCon(v):shipLine(v);
+function lineStats(P,terms){
+  const ef=evpFn(P.ym), A={}; P.days.forEach(d=>terms.forEach(t=>((d[t]||{}).lines||[]).forEach(l=>{ if(!SHL[l.s]) return;
+    const c=shipGrp(l.v), a=A[c]||(A[c]={c,mv:0,b:0,h:0,e:ef?0:null,ships:{}}); a.mv+=l.mv; a.b+=l.bi+l.be; a.h+=l.hbe;
+    if(ef){ const q=ef(t,d.d); a.e+=q?(l.bi+l.be)*q:0; }
+    const sk=shipKey(l.v), o=a.ships[sk]||(a.ships[sk]={v:l.v,mv:0}); o.mv+=l.mv; })));
+  return Object.values(A).map(a=>Object.assign({},a,{r:a.h?a.mv/a.h:null,ns:Object.keys(a.ships).length})).sort((x,y)=>((x.c===NOCL)-(y.c===NOCL))||(y.mv-x.mv));
+}
+function lineStatsM(P,terms,mode){ const o=lnMode; lnMode=mode; try{ return lineStats(P,terms); } finally{ lnMode=o; } }
+function lineHtml(P,terms,cl){ const R=lineStats(P,terms); if(!R.length) return '';
+  const T=R.reduce((a,x)=>({mv:a.mv+x.mv,b:a.b+x.b,h:a.h+x.h,e:a.e+(x.e||0)}),{mv:0,b:0,h:0,e:0}), hasE=R.some(x=>x.e!=null), unk=R.find(x=>x.c===NOCL);
+  const rows=R.map(x=>{ const sh=Object.values(x.ships).sort((a,b)=>b.mv-a.mv), txt=sh.slice(0,4).map(o=>o.v).join(', ')+(sh.length>4?' …':'');
+    return `<tr><td><b>${esc(x.c)}</b><div class="m-note" style="margin:2px 0 0;font-size:11px">${x.ns} navire${x.ns>1?'s':''} · ${esc(txt)}</div></td><td>${trF(x.mv)}</td><td>${T.mv?Math.round(100*x.mv/T.mv):0} %</td><td>${trF(x.b)}</td>${hasE?`<td>${x.e==null?'—':trF(Math.round(x.e))}</td>`:''}<td class="tr-v ${cl(x.r)}"><b>${trR(x.r)}</b></td></tr>`; }).join('');
+  return `<section class="m-box"><b class="tr-h">Trafic par ${lnMode==='con'?'consignataire':'compagnie maritime (armateur)'} · ${terms.length>1?'TCE + TC3':terms[0]} · ${esc(perfInfo(P).lab)}</b><div class="seg m-seg" role="group" aria-label="Regroupement" style="margin:6px 0"><button type="button" data-lnm="arm" aria-pressed="${lnMode==='arm'}">Armateur</button><button type="button" data-lnm="con" aria-pressed="${lnMode==='con'}">Consignataire</button></div><table class="tr-t"><thead><tr><th>${lnMode==='con'?'Consignataire':'Compagnie'}</th><th>Mvts</th><th>Part</th><th>Boîtes</th>${hasE?'<th>EVP*</th>':''}<th>Rendt</th></tr></thead><tbody>${rows}<tr class="tr-tot"><td><b>Total</b></td><td><b>${trF(T.mv)}</b></td><td><b>100 %</b></td><td><b>${trF(T.b)}</b></td>${hasE?`<td><b>${trF(Math.round(T.e))}</b></td>`:''}<td class="tr-v ${cl(T.h?T.mv/T.h:null)}"><b>${trR(T.h?T.mv/T.h:null)}</b></td></tr></tbody></table><p class="m-note" style="margin:8px 2px 0">Le rapport de performance donne le nom du navire : l'armateur et le consignataire viennent du fichier « Situation » (prévisions des navires), mémorisés à chaque situation reçue. Navire absent de ces situations : compagnie déduite du nom ou d'une recherche Internet.${unk?' Les navires « Non classé » sont à affecter.':''} Mouvements, boîtes et EVP estimé suivent la même base que le classement des équipes (total identique).</p>${canDrv()&&lnMode!=='con'?'<div class="m-date"><button type="button" class="m-up tr-btn" id="lnEdit">Classer les navires par compagnie</button></div>':''}</section>`; }
+function lineModal(P){
+  const seen={}; ['TCE','TC3'].forEach(t=>P.days.forEach(d=>((d[t]||{}).lines||[]).forEach(l=>{ const k=shipKey(l.v); (seen[k]||(seen[k]={v:l.v,mv:0})).mv+=l.mv; })));
+  const L=Object.values(seen).sort((a,b)=>((shipLine(a.v)===NOCL)-(shipLine(b.v)===NOCL))||(b.mv-a.mv));
+  modal(`<h3>Compagnie de chaque navire</h3><p class="vv">Choisissez ou tapez la compagnie. Le choix est partagé et s'applique à tous les mois. Laissez vide pour revenir à la compagnie déduite du nom.</p>
+    <datalist id="lnList">${LINES.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+    <div style="max-height:52vh;overflow:auto">${L.map((o,i)=>`<div class="rot-r"><label>${esc(o.v)} · ${trF(o.mv)} mvts</label><input type="text" list="lnList" data-k="${esc(shipKey(o.v))}" data-auto="${esc(shipLineAuto(o.v))}" value="${esc(shipLine(o.v)===NOCL?'':shipLine(o.v))}" placeholder="${esc(shipLineAuto(o.v)===NOCL?'à classer':shipLineAuto(o.v))}" maxlength="24"></div>`).join('')}</div>
+    <div class="mdl-b"><button type="button" data-close>Annuler</button><button type="button" class="primary" id="lnOk">Enregistrer</button></div><div class="note" id="lnErr"></div>`,
+    m=>{ m.querySelector('#lnOk').onclick=async()=>{ const pd=pendGet(), nl=Object.assign({},LN); let n=0;
+      m.querySelectorAll('input[data-k]').forEach(i=>{ const k=i.dataset.k, v=i.value.trim().toUpperCase(), auto=i.dataset.auto, cur=LN[k]||'';
+        const want=(!v||v===auto.toUpperCase())?'':v; if(want===cur) return; n++; if(want) nl[k]=want; else delete nl[k]; pd['LINE:'+k]={v:want,ts:Date.now()}; });
+      if(!n){ closeModal(); return; } pendSet(pd); LN=nl; closeModal(); const err=await pendFlush(); toast(err?failMsg(err):'Compagnies enregistrées (partagées)'); render(); }; });
+}
 function rotModal(){
   const f=(t,s)=>`<div class="rot-r"><label>${t} · S${s}</label><input type="text" id="rot_${t}_${s}" value="${esc(ROT[t][s]||'')}" maxlength="24"></div>`;
   modal(`<h3>Rotation des équipes</h3><p class="vv">Indiquez les équipes de la semaine de référence ; l'application déduit les autres semaines (S1 → S3 → S2 → S1).</p>
@@ -714,7 +760,7 @@ function perfShifts(P,terms){
 }
 const perfInfo=P=>{ const y=+P.ym.slice(0,4), m=+P.ym.slice(5,7), ld=+P.last.slice(8,10), dim=trDays(y,m), partial=ld<dim; return {partial,ld,dim,lab:trMois(P.ym)+(partial?' (au '+ld+'/'+P.ym.slice(5,7)+')':'')}; };
 function rankRows(rows,cl,withLabel,head){ const tot=rows.reduce((a,x)=>({mv:a.mv+x.mv,b:a.b+x.b,h:a.h+x.h,e:a.e+(x.e||0)}),{mv:0,b:0,h:0,e:0}), rt=tot.h?tot.mv/tot.h:null, hasE=rows.some(x=>x.e!=null);
-  return `<table class="tr-t"><thead><tr><th>#</th><th>${head||(withLabel?'Terminal · Shift':'Shift')}</th><th>Rendt</th><th>Mvts</th><th>Boîtes</th>${hasE?'<th>EVP*</th>':''}</tr></thead><tbody>${rows.map((x,i)=>`<tr><td><b>${i+1}</b></td><td>${esc(x.lab||SHL[x.s])}</td><td class="tr-v ${cl(x.r)}"><b>${trR(x.r)}</b></td><td>${trF(x.mv)}</td><td>${trF(x.b)}</td>${hasE?`<td>${x.e==null?'—':trF(Math.round(x.e))}</td>`:''}</tr>`).join('')}<tr class="tr-tot"><td></td><td><b>Mois</b></td><td class="tr-v ${cl(rt)}"><b>${trR(rt)}</b></td><td><b>${trF(tot.mv)}</b></td><td><b>${trF(tot.b)}</b></td>${hasE?`<td><b>${trF(Math.round(tot.e))}</b></td>`:''}</tr></tbody></table>`; }
+  return `<table class="tr-t tr-r"><thead><tr><th>#</th><th>${head||(withLabel?'Terminal · Shift':'Shift')}</th><th>Rendt</th><th>Mvts</th><th>Boîtes</th>${hasE?'<th>EVP*</th>':''}</tr></thead><tbody>${rows.map((x,i)=>`<tr><td><b>${i+1}</b></td><td>${esc(x.lab||SHL[x.s])}${x.sub?`<div class="m-note" style="margin:1px 0 0;font-size:11px">${esc(x.sub)}</div>`:''}</td><td class="tr-v ${cl(x.r)}"><b>${trR(x.r)}</b></td><td>${trF(x.mv)}</td><td>${trF(x.b)}</td>${hasE?`<td>${x.e==null?'—':trF(Math.round(x.e))}</td>`:''}</tr>`).join('')}<tr class="tr-tot"><td></td><td><b>Mois</b></td><td class="tr-v ${cl(rt)}"><b>${trR(rt)}</b></td><td><b>${trF(tot.mv)}</b></td><td><b>${trF(tot.b)}</b></td>${hasE?`<td><b>${trF(Math.round(tot.e))}</b></td>`:''}</tr></tbody></table>`; }
 function rankByTerminal(P){ const out=[]; ['TCE','TC3'].forEach(t=>perfShifts(P,[t]).forEach(x=>out.push(Object.assign({},x,{lab:t+' · '+(x.lab||SHL[x.s])})))); return out.sort(lastD); }
 function buildShiftPdf(P,Pm,obj){
   const {jsPDF}=window.jspdf, d=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}), inf=perfInfo(P);
@@ -730,7 +776,7 @@ function buildShiftPdf(P,Pm,obj){
     d.autoTable({startY:y+3,head:[['#',head||(withLabel?'Terminal - Shift':'Shift'),'Rendement','Mouvements','Boites traitees'].concat(hasE?['EVP (est.)']:[])],body,headStyles:HEAD,styles:BODY,columnStyles:Object.assign({5:{halign:'right'}},al),margin:{left:14,right:14},
       didParseCell:h=>{ if(h.section==='head'&&h.column.index>=2) h.cell.styles.halign='right'; if(h.section==='body'&&h.row.index===body.length-1) h.cell.styles.fontStyle='bold'; if(h.section==='body'&&h.column.index===2&&h.row.index<body.length-1){ const v=rows[h.row.index].r; h.cell.styles.textColor=v==null?0:v>=obj?[22,120,70]:v>=Math.min(20,obj)?[190,110,0]:[180,35,30]; h.cell.styles.fontStyle='bold'; } }});
     y=d.lastAutoTable.finalY+6.5; };
-  const nm=x=>Object.assign({},x,{lab:x.lab.replace(/\u00b7/g,'-')});
+  const nm=x=>Object.assign({},x,{lab:x.lab.replace(/\u00b7/g,'-')+(x.s0==='D'?' (hors equipe)':'')});
   sect('TC3 - classement des equipes',perfGroups(P,['TC3']).map(nm),true,'Equipe');
   sect('TCE - classement des equipes',perfGroups(P,['TCE']).map(nm),true,'Equipe');
   sect('Equipes completes (groupe TC3 + groupe TCE)',perfPairs(P).map(nm),true,'Equipe');
@@ -741,6 +787,23 @@ function buildShiftPdf(P,Pm,obj){
     d.autoTable({startY:y+3,head:[['Mois','S1','S2','S3','Meilleur']],body,headStyles:HEAD,styles:BODY,columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},margin:{left:14,right:14},didParseCell:h=>{ if(h.section==='head'&&h.column.index>=1) h.cell.styles.halign='right'; }}); y=d.lastAutoTable.finalY+6; }
   d.setFont('helvetica','normal'); d.setFontSize(8.5); d.setTextColor(110);
   d.text(d.splitTextToSize('Rendement = mouvements / heures de portique. Boites = import + export manutentionnes. EVP estime = boites x EVP par boite du terminal le jour concerne (rapport de trafic quotidien). Source : rapport journalier de performance operationnelle.',182),14,Math.min(y,284));
+  /* page 2 : trafic par compagnie maritime (armateur) et par consignataire, d'apres le fichier Situation */
+  { const terms=['TCE','TC3'], asc=t=>String(t).replace(/[^\x20-\x7e]/g,c=>({'é':'e','è':'e','ê':'e','à':'a','â':'a','ô':'o','î':'i','ç':'c'}[c]||'')), page=(mode,title)=>{
+      const R=lineStatsM(P,terms,mode); if(!R.length) return; if(y>200){ d.addPage(); y=18; }
+      d.setTextColor(0); d.setFont('helvetica','bold'); d.setFontSize(12); d.text(title,14,y);
+      const T=R.reduce((a,x)=>({mv:a.mv+x.mv,b:a.b+x.b,h:a.h+x.h,e:a.e+(x.e||0)}),{mv:0,b:0,h:0,e:0}), hasE=R.some(x=>x.e!=null);
+      const body=R.map(x=>{ const sh=Object.values(x.ships).sort((a,b)=>b.mv-a.mv); return [asc(x.c),x.ns+' : '+asc(sh.slice(0,3).map(o=>o.v).join(', '))+(sh.length>3?' ...':''),num(x.mv),(T.mv?Math.round(100*x.mv/T.mv):0)+' %',num(x.b)].concat(hasE?[x.e==null?'-':num(x.e)]:[]).concat([rr(x.r)]); });
+      body.push(['Total','',num(T.mv),'100 %',num(T.b)].concat(hasE?[num(T.e)]:[]).concat([rr(T.h?T.mv/T.h:null)]));
+      const ci=hasE?6:5;
+      d.autoTable({startY:y+3,head:[[mode==='con'?'Consignataire':'Armateur','Navires','Mouvements','Part','Boites'].concat(hasE?['EVP (est.)']:[]).concat(['Rendement'])],body,headStyles:HEAD,styles:{fontSize:9,cellPadding:1.5},
+        columnStyles:{0:{cellWidth:34,fontStyle:'bold'},1:{cellWidth:'auto',fontSize:7.5,textColor:90},2:{halign:'right'},3:{halign:'right',cellWidth:14},4:{halign:'right'},5:{halign:'right'},6:{halign:'right'}},margin:{left:14,right:14},
+        didParseCell:h=>{ if(h.section==='head'&&h.column.index>=2) h.cell.styles.halign='right'; if(h.section==='body'&&h.row.index===body.length-1) h.cell.styles.fontStyle='bold'; if(h.section==='body'&&h.column.index===ci&&h.row.index<body.length-1){ const v=R[h.row.index].r; h.cell.styles.textColor=v==null?0:v>=obj?[22,120,70]:v>=Math.min(20,obj)?[190,110,0]:[180,35,30]; h.cell.styles.fontStyle='bold'; } }});
+      y=d.lastAutoTable.finalY+8; };
+    d.addPage(); y=16; d.setFont('helvetica','bold'); d.setFontSize(17); d.setTextColor(0); d.text('TRAFIC PAR COMPAGNIE MARITIME',14,y); y+=6;
+    d.setFont('helvetica','normal'); d.setFontSize(10.5); d.setTextColor(80); d.text('Marsa Maroc - TCE / TC3PC  |  '+inf.lab.replace(/[^\x20-\x7eÀ-ÿ]/g,''),14,y); y+=9;
+    page('arm','Par armateur (compagnie maritime)'); page('con','Par consignataire');
+    d.setFont('helvetica','normal'); d.setFontSize(8.5); d.setTextColor(110);
+    d.text(d.splitTextToSize('Armateur et consignataire : fichier Situation (previsions des navires) ; navire absent des situations : compagnie deduite du nom ou classee a la main. Non classe = navire a affecter. Meme base que le classement des equipes (total identique).',182),14,Math.min(y,284)); }
   return d;
 }
 async function shareShiftPdf(P,Pm,obj){
@@ -765,7 +828,7 @@ function renderTraf(){
   if(!monLoaded){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Chargement…',false,true)+'<div class="m-body"><div class="empty"><b>Chargement…</b></div></div>'; mBind(); loadMonthly().then(()=>render()).catch(()=>{ monLoaded=true; render(); }); return; }
   const imp=canImp()?`<div class="m-date"><label class="m-up">Importer un rapport (trafic, performance ou bilan mensuel, fichier Excel)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'';
   const T=Object.values(mon).filter(x=>x&&x.kind==='trafic').sort((a,b)=>a.ym<b.ym?1:-1), Pm=Object.values(mon).filter(x=>x&&x.kind==='perf'), Bm=Object.values(mon).filter(x=>x&&x.kind==='bilan').sort((a,b)=>b.year-a.year), BL=Bm[0]?renderBilan(Bm[0]):'';
-  const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; pmSel=null; render(); }; const pm=$('#pmSel'); if(pm) pm.onchange=e=>{ pmSel=e.target.value; render(); }; const re=$('#rotEdit'); if(re) re.onclick=rotModal; const sp=$('#shPdf'); if(sp) sp.onclick=()=>{ try{ window.__shPdf(); }catch(e){ toast('PDF impossible : '+e.message); } }; };
+  const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; pmSel=null; render(); }; const pm=$('#pmSel'); if(pm) pm.onchange=e=>{ pmSel=e.target.value; render(); }; const re=$('#rotEdit'); if(re) re.onclick=rotModal; const le=$('#lnEdit'); if(le) le.onclick=()=>lineModal(window.__lnP); document.querySelectorAll('[data-lnm]').forEach(b=>{ b.onclick=()=>{ lnMode=b.dataset.lnm; render(); }; }); const sp=$('#shPdf'); if(sp) sp.onclick=()=>{ try{ window.__shPdf(); }catch(e){ toast('PDF impossible : '+e.message); } }; };
   if(!T.length&&!Pm.length&&!BL){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Aucun rapport reçu',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucun rapport de trafic</b>Les rapports « Suivi Trafic Quotidien » et « Rapport Journalier de Performance Opérationnelle » arrivent par e-mail (boîte de l'application) ou s'importent ici.</div></div>`; bind(); return; }
   const years=[...new Set(T.map(x=>x.ym.slice(0,4)))];
   const opts=[...T.map(x=>['M:'+x.ym,trMois(x.ym)]),...years.filter(y=>T.filter(x=>x.ym.slice(0,4)===y).length>1).map(y=>['Y:'+y,'Cumul '+y+' (mois reçus)'])];
@@ -798,9 +861,9 @@ function renderTraf(){
     { const tt=trTerm(), inf=perfInfo(P), terms=tt==='ALL'?['TCE','TC3']:[tt], R1=perfShifts(P,terms);
       if(R1.length){
         { const G1=perfGroups(P,terms);
-          if(G1.length){ const lg=x=>Object.assign({},x,{lab:x.lab+' ('+x.nj+'/'+P.days.length+' j)'});
-            body+=`<h3 class="m-h">Classement des équipes · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité de chaque équipe, du meilleur au moins bon</b>${rankRows(G1.map(lg),cl,true,'Équipe')}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Équipes complètes (groupe TC3 + groupe TCE)</b>${rankRows(perfPairs(P),cl,true,'Équipe')}`:''}<p class="m-note" style="margin:8px 2px 0">Chaque journée est attribuée à l'équipe de service ce jour-là d'après la rotation hebdomadaire (S1 → S3 → S2 → S1) ; le 3e shift du dimanche n'est attribué à aucune équipe et figure sur une ligne séparée « S3 DIMANCHE (hors équipe) ». (a/b j) = jours avec mouvements / jours du mois : chaque équipe est de service tous les jours sur le shift de la semaine, mais un shift sans navire à quai ne produit aucun mouvement, d'où des écarts surtout au TCE. Si les équipes ne sont pas les bonnes pour une période, corrigez la rotation ci-dessous. *EVP estimé : boîtes de l'équipe × EVP par boîte du terminal ce jour-là (rapport de trafic quotidien) ; le rapport de performance ne donne pas les 20'/40'.</p></section>${tt==='TC3'||tt==='TCE'||tt==='ALL'?`<h3 class="m-h">Détail par semaine · ${esc(inf.lab)}</h3><section class="m-box"><p class="m-note" style="margin:0 2px 4px">Pour chaque semaine (du lundi), l'équipe de service sur chaque shift et ses mouvements. Les semaines à cheval sur deux mois ne comptent que les jours du mois.</p>${weeksHtml(P,terms)}</section>`:''}${rotCard()}`; } }
-        body+=`<h3 class="m-h">Classement des créneaux (shifts) · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité, du meilleur au moins bon</b>${rankRows(R1,cl,false)}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Détail par terminal et par shift</b>${rankRows(rankByTerminal(P),cl,true)}`:''}<p class="m-note" style="margin:8px 2px 0">Rendement = mouvements ÷ heures de portique (objectif ${obj}). Boîtes = import + export manutentionnés.${inf.partial?' Mois en cours : résultat provisoire, définitif en fin de mois.':''}</p><div class="m-date"><button type="button" class="m-up tr-btn" id="shPdf">Partager le classement en PDF (3 shifts)</button></div></section>`;
+          if(G1.length){ const lg=x=>Object.assign({},x,{sub:(x.s0==='D'?'hors équipe · ':'')+x.nj+'/'+P.days.length+' j'});
+            body+=`<h3 class="m-h">Classement des équipes · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité de chaque équipe, du meilleur au moins bon</b>${rankRows(G1.map(lg),cl,true,'Équipe')}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Équipes complètes (groupe TC3 + groupe TCE)</b>${rankRows(perfPairs(P),cl,true,'Équipe')}`:''}<p class="m-note" style="margin:8px 2px 0">Chaque journée est attribuée à l'équipe de service ce jour-là d'après la rotation hebdomadaire (S1 → S3 → S2 → S1) ; le 3e shift du dimanche n'est attribué à aucune équipe et figure sur une ligne séparée « S3 DIMANCHE » (hors équipe). (a/b j) = jours avec mouvements / jours du mois : chaque équipe est de service tous les jours sur le shift de la semaine, mais un shift sans navire à quai ne produit aucun mouvement, d'où des écarts surtout au TCE. Si les équipes ne sont pas les bonnes pour une période, corrigez la rotation ci-dessous. *EVP estimé : boîtes de l'équipe × EVP par boîte du terminal ce jour-là (rapport de trafic quotidien) ; le rapport de performance ne donne pas les 20'/40'.</p></section>${tt==='TC3'||tt==='TCE'||tt==='ALL'?`<h3 class="m-h">Détail par semaine · ${esc(inf.lab)}</h3><section class="m-box"><p class="m-note" style="margin:0 2px 4px">Pour chaque semaine (du lundi), l'équipe de service sur chaque shift et ses mouvements. Les semaines à cheval sur deux mois ne comptent que les jours du mois.</p>${weeksHtml(P,terms)}</section>`:''}${rotCard()}`; } }
+        body+=`<h3 class="m-h">Classement des créneaux (shifts) · ${tt==='ALL'?'TCE + TC3':tt} · ${esc(inf.lab)}</h3><section class="m-box"><b class="tr-h">Rendement mensuel et trafic traité, du meilleur au moins bon</b>${rankRows(R1,cl,false)}${tt==='ALL'?`<b class="tr-h" style="display:block;margin-top:12px">Détail par terminal et par shift</b>${rankRows(rankByTerminal(P),cl,true)}`:''}<p class="m-note" style="margin:8px 2px 0">Rendement = mouvements ÷ heures de portique (objectif ${obj}). Boîtes = import + export manutentionnés.${inf.partial?' Mois en cours : résultat provisoire, définitif en fin de mois.':''}</p><div class="m-date"><button type="button" class="m-up tr-btn" id="shPdf">Partager le classement en PDF (équipes + compagnies)</button></div></section>`;
         { const H=Pm.filter(x=>x.ym<=P.ym).sort((a,b)=>a.ym<b.ym?1:-1);
           if(H.length>1) body+=`<section class="m-box"><b class="tr-h">Mois précédents · rendement par shift (${tt==='ALL'?'TCE + TC3':tt})</b><table class="tr-t"><thead><tr><th>Mois</th><th>S1</th><th>S2</th><th>S3</th><th>Meilleur</th></tr></thead><tbody>${H.map(p=>{ const r=perfShifts(p,terms).filter(z=>z.s!=='D'), g=n=>{ const x=r.find(z=>z.s===n); return `<td class="tr-v ${cl(x&&x.r)}">${x?trR(x.r):'—'}</td>`; }; return `<tr><td>${esc(perfInfo(p).lab)}</td>${g(1)}${g(2)}${g(3)}<td><b>${r.length?'S'+r[0].s:'—'}</b></td></tr>`; }).join('')}</tbody></table></section>`; }
         window.__shPdf=()=>shareShiftPdf(P,Pm,obj); } }
@@ -809,6 +872,7 @@ function renderTraf(){
     const V={}; ['TCE','TC3'].forEach(T3=>P.days.forEach(d=>d[T3].lines.forEach(l=>{ const k=T3+'|'+l.v; const o=V[k]||(V[k]={t:T3,v:l.v,mv:0,h:0,ar:0,j:new Set()}); o.mv+=l.mv; o.h+=l.hbe; o.ar+=l.ar; o.j.add(d.d); })));
     const top=Object.values(V).sort((a,b)=>b.mv-a.mv).slice(0,12);
     body+=`<section class="m-box"><b class="tr-h">Navires du mois (par mouvements)</b><table class="tr-t"><thead><tr><th>Navire</th><th>Term.</th><th>Mvts</th><th>Rendt</th><th>Arrêts</th></tr></thead><tbody>${top.map(o=>{ const r=o.h?o.mv/o.h:null; return `<tr><td>${esc(o.v)}</td><td>${o.t}</td><td>${trF(o.mv)}</td><td class="tr-v ${cl(r)}">${r==null?'—':r.toFixed(1).replace('.',',')}</td><td>${trF(o.ar)}</td></tr>`; }).join('')}</tbody></table></section>`;
+    { const tt2=trTerm(), terms2=tt2==='ALL'?['TCE','TC3']:[tt2]; body+=lineHtml(P,terms2,cl); window.__lnP=P; }
     body+=`<p class="m-note">Le rapport de performance compte des mouvements de portique (par shift et par navire) ; le rapport de trafic compte des boîtes et des EVP par jour. Les deux bases sont différentes : ne pas les comparer entre elles.</p>`;
   }
   app.innerHTML=mTop('Trafic · comparaison avec 2025',sub,false,true)+`<div class="m-body">${imp}${segHtml(trTerm(),'traf')}${BL}${opts.length&&BL?'<h3 class="m-h">Suivi quotidien · '+(trTerm()==='ALL'?'TCE + TC3':trTerm())+'</h3>':''}${opts.length?`<div class="m-date"><select id="trSel" aria-label="Période">${opts.map(o=>`<option value="${o[0]}" ${o[0]===trSel?'selected':''}>${o[1]}</option>`).join('')}</select></div>`:''}${body}</div>`;
@@ -866,19 +930,19 @@ async function loadSnaps(retry){
   const dr=!canDrv()?{error:1}:await sb.from('driver_shift').select('data').order('ts',{ascending:false}).limit(30);
   const dd=dr.error?[]:dr.data.map(r=>r.data).reverse();
   /* postes a quai saisis par l'utilisateur (table escale_meta ; a defaut, memoire de cet appareil) */
-  const mr=await sb.from('escale_meta').select('visit,poste,updated_at'); let mt={}, cm={}, dp={}, gtv=null, rotv=null, mbv=null;
-  const ap=(k,val,ts)=>{ if(k==='CFG:GT'){ gtv=val?+val:null; } else if(k==='MBX:STATUS'){ try{ mbv=JSON.parse(val); }catch(e){ mbv=null; } } else if(k==='CFG:ROT'){ try{ const o=JSON.parse(val); rotv=o&&o.ref&&o.TC3&&o.TCE?o:null; }catch(e){ rotv=null; } } else if(/^DEP:/.test(k)){ if(val) dp[k.slice(4)]=ts||1; else delete dp[k.slice(4)]; } else if(/^CRANE:/.test(k)){ if(val){ const q=val.split('|'); cm[k.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:ts||0}; } else delete cm[k.slice(6)]; } else { if(val) mt[k]=val; else delete mt[k]; } };
+  const mr=await sb.from('escale_meta').select('visit,poste,updated_at'); let mt={}, cm={}, dp={}, lm={}, gtv=null, rotv=null, mbv=null;
+  const ap=(k,val,ts)=>{ if(k==='CFG:GT'){ gtv=val?+val:null; } else if(k==='MBX:STATUS'){ try{ mbv=JSON.parse(val); }catch(e){ mbv=null; } } else if(k==='CFG:ROT'){ try{ const o=JSON.parse(val); rotv=o&&o.ref&&o.TC3&&o.TCE?o:null; }catch(e){ rotv=null; } } else if(/^LINE:/.test(k)){ if(val) lm[k.slice(5)]=val; else delete lm[k.slice(5)]; } else if(/^DEP:/.test(k)){ if(val) dp[k.slice(4)]=ts||1; else delete dp[k.slice(4)]; } else if(/^CRANE:/.test(k)){ if(val){ const q=val.split('|'); cm[k.slice(6)]={vessel:q[0]||'',poste:q[1]||'',ts:ts||0}; } else delete cm[k.slice(6)]; } else { if(val) mt[k]=val; else delete mt[k]; } };
   if(!mr.error) mr.data.forEach(r=>{ if(r.poste) ap(r.visit,r.poste,Date.parse(r.updated_at)||0); });
   pendMigrate();
   /* modifications faites sur cet appareil et pas encore enregistrees sur le serveur : elles restent visibles et sont renvoyees */
   { const pd=pendGet(); Object.keys(pd).forEach(k=>ap(k,pd[k].v,pd[k].ts)); if(!mr.error&&Object.keys(pd).length) pendFlush(); }
   if(gtv>0&&gtv<=80) GT=gtv;
-  ROT=rotv||ROT_DEFAULT; MBX=mbv;
+  ROT=rotv||ROT_DEFAULT; MBX=mbv; LN=lm;
   meta=mt; cman=cm; depM=dp;
   { const sr=await sb.from('situation').select('data').order('ts',{ascending:false}).limit(1); let sx=null;
     if(!sr.error&&sr.data&&sr.data.length) sx=sr.data[0].data; else { try{ sx=JSON.parse(localStorage.getItem('situation')||'null'); }catch(e){} }
-    sit=sx; }
-  const sig=JSON.stringify(meta)+'B'+(mbv?mbv.t:'')+'S'+(sit?sit.id:'')+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
+    sit=sx; learnArm(); }
+  const sig=JSON.stringify(meta)+JSON.stringify(lm)+'B'+(mbv?mbv.t:'')+'S'+(sit?sit.id:'')+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
   if(sig===lastSig) return; lastSig=sig;
   hours=hd; rtgs=rd; drivers=dd; if(!drvKey||!dd.some(x=>x.id===drvKey)) drvKey=dd.length?dd[dd.length-1].id:null; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
 }
@@ -1161,7 +1225,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.48';
+const APP_V='7.52';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
