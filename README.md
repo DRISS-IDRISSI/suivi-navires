@@ -224,6 +224,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.53 — CIELO DI RABAT = MAERSK
+- CIELO DI RABAT est imposé à MAERSK (le fichier Situation donne D'AMICO, l'armateur propriétaire). Priorité : choix manuel > compagnie imposée > situation > recherche Internet > nom du navire. Le consignataire reste celui de la situation (PACOCEAN).
+
 ## v7.52 — PDF : page « Trafic par compagnie maritime » + affichage téléphone
 - Le PDF du classement a maintenant 2 pages : page 1 = classement des équipes (inchangée) ; page 2 = trafic par armateur et par consignataire du mois choisi (mouvements, part, boîtes, EVP estimé, rendement, navires), même total que page 1.
 - Téléphone : le tableau du classement des équipes tient dans l'écran (plus de défilement à droite) ; le nombre de jours passe sous le nom de l'équipe ; la ligne « S3 DIMANCHE » indique « hors équipe » en dessous.

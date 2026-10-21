@@ -710,7 +710,9 @@ async function learnArm(){ if(armBusy||!canDrv()||!monLoaded||!sit||!sit.vessels
   try{ const doc=Object.assign({kind:'armateurs',ships:{}},mon['armateurs']||{}); doc.ships=Object.assign({},doc.ships); let ch=0;
     sit.vessels.forEach(e=>{ const k=shipKey(e.name), a=String(e.armateur||'').trim().toUpperCase(), c=String(e.consignataire||'').trim().toUpperCase(); if(!k||!a) return; const o=doc.ships[k]; if(!o||o.a!==a||o.c!==c){ const sd=SEED_ARM[k]; if(!o&&sd&&sd[0]===a&&sd[1]===c) return; doc.ships[k]={a,c}; ch++; } });
     if(ch){ doc.last=todayCasa(); const {error}=await sb.from('monthly').upsert({id:'armateurs',ts:new Date().toISOString(),data:doc}); if(!error){ mon['armateurs']=doc; } } }catch(e){} armBusy=false; }
-function shipLineAuto(v){ const k=shipKey(v); const ai=armInfo(k); if(ai&&ai.a) return armNorm(ai.a); if(SHIP_LINES[k]) return SHIP_LINES[k]; for(const r of LINE_RULES) if(r[0].test(k)) return r[1]; return NOCL; }
+/* compagnie imposée (priorité sur le fichier Situation) : le fichier donne l'armateur propriétaire, pas la ligne qui exploite le navire */
+const LINE_FORCE={'CIELO DI RABAT':'MAERSK'};
+function shipLineAuto(v){ const k=shipKey(v); if(LINE_FORCE[k]) return LINE_FORCE[k]; const ai=armInfo(k); if(ai&&ai.a) return armNorm(ai.a); if(SHIP_LINES[k]) return SHIP_LINES[k]; for(const r of LINE_RULES) if(r[0].test(k)) return r[1]; return NOCL; }
 const shipLine=v=>LN[shipKey(v)]||shipLineAuto(v);
 const shipCon=v=>{ const k=shipKey(v), ai=armInfo(k); return ai&&ai.c?ai.c:(/^MSC\b/.test(k)?'MSC MAROC':NOCL); };
 const shipGrp=v=>lnMode==='con'?shipCon(v):shipLine(v);
@@ -1225,7 +1227,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.52';
+const APP_V='7.53';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
