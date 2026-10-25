@@ -946,7 +946,7 @@ async function loadSnaps(retry){
     sit=sx; learnArm(); }
   const sig=JSON.stringify(meta)+JSON.stringify(lm)+'B'+(mbv?mbv.t:'')+'S'+(sit?sit.id:'')+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
   if(sig===lastSig) return; lastSig=sig;
-  hours=hd; rtgs=rd; drivers=dd; if(!drvKey||!dd.some(x=>x.id===drvKey)) drvKey=dd.length?dd[dd.length-1].id:null; snaps=[]; mergeSnaps(data.map(r=>r.data)); render();
+  hours=hd; rtgs=rd; drivers=dd; if(!drvKey||!dd.some(x=>x.id===drvKey)) drvKey=dd.length?dd[dd.length-1].id:null; snaps=[]; mergeSnaps(data.map(r=>r.data)); adjPlan(); render();
 }
 async function saveHourly(h){
   const {error}=await sb.from('hourly').upsert({id:h.id,ts:new Date(h.ts).toISOString(),data:h});
@@ -1009,6 +1009,13 @@ function parseSituation(wb){
 }
 let sit=null;
 const sitBy=v=>{ if(!sit||!v) return null; return sit.vessels.find(e=>e.visit&&e.visit===String(v))||null; };
+/* Le rapport de shift ne connaît que les mouvements déjà instruits dans le TOS : les export vides (et tout ce qui n'est pas encore planifié) n'y figurent pas, d'où un « restant 0 » et un avancement de ~99 % alors que le navire est loin d'être fini.
+   Le programme du fichier Situation (total prévu à manipuler) sert alors de total : restant = max(restant TOS, total prévu - cumulé). Le surplus est affiché en export vide (jusqu'au programme export vide). Idempotent : repart toujours des valeurs d'origine. */
+function adjPlan(){ snaps.forEach(sn=>(sn.vessels||[]).forEach(v=>{
+  if(v._r0===undefined){ v._r0=v.rem; v._e0=v.remE; } v.rem=v._r0; v.remE=v._e0; v.plan=null;
+  const e=sitBy(v.visit); if(!e||e.status!=='Accosté'||!(e.total>0)||v._r0==null||v.acc==null||!/WORKING/i.test(v.phase||'')) return;
+  const ex=Math.round(e.total-((v.acc||0)+v._r0)); if(ex<=0) return;
+  const exE=Math.min(ex,(e.prog&&e.prog.expV)||0); v.rem=v._r0+ex; if(exE>0) v.remE=(v._e0||0)+exE; v.plan={total:e.total,extra:ex,extraE:exE}; })); }
 const sitByName=nm=>{ if(!sit) return null; const k=normN(nm); const L=sit.vessels.filter(e=>normN(e.name)===k); return L.find(e=>e.status!=='Appareillé'&&e.status!=='Terminé')||L[0]||null; };
 const posteTerm=po=>{ const m=String(po||'').match(/(\d+)/); if(!m) return /TCE/i.test(po||'')?'TCE':null; const k=+m[1]; return k>=80?'TC3':k>=70?'TCE':null; };   /* P70-P79 = TCE, P80-P89 = TC3 */
 /* ---- enregistrement partage (table escale_meta) avec file d'attente locale ---- */
@@ -1227,7 +1234,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.53';
+const APP_V='7.54';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
@@ -1578,6 +1585,7 @@ function mGlob(s,v){
   +`<div class="m-body"><section class="m-box"><div class="m-big"><strong>${p==null?'—':fmt(p,1)+' %'}</strong><span>${esc(v.phase)}</span></div>${mBar(p)}
     <div class="m-two"><div><b>${fmt(ac(v))}</b><span>faits</span></div><div><b>${fmt(rm(v))}</b><span>restants</span></div><div><b>${v.rem===0?'Terminé':esc(e.txt)}</b><span>${e.clock?'fin vers '+e.clock:'fin estimée'}</span></div></div>
     ${L&&!L.unreliable?`<p class="m-note">Rapport de shift + ${fmt(L.mv)} mouvement(s) des grues jusqu'à ${hTime(L.upto)}${L.gaps?` · ${L.gaps} heure(s) manquante(s)`:''} (estimation)</p>`:L?`<p class="m-note m-w">Mise à jour horaire suspendue : les grues ont fait ${fmt(L.mv)} mouvements depuis le rapport de shift (restant connu ${fmt(v.rem)}). Navire presque terminé, grues réaffectées ou rapport de shift en attente ; chiffres du dernier rapport conservés.</p>`:''}</section>
+  ${v.plan?`<p class="m-note">Total prévu d'après la Situation : <b>${fmt(v.plan.total)}</b> mouvements. Le rapport de shift ne compte pas encore <b>${fmt(v.plan.extra)}</b> mouvement(s)${v.plan.extraE?` (export vides non encore instruits : ${fmt(v.plan.extraE)})`:''} : ils sont ajoutés au restant.</p>`:''}
   ${mRow(IC.imp,'Import',n(v.remImp!=null||v.remImpF!=null?(v.remImp!=null?v.remImp:(v.remImpF||0)+(v.remImpE||0)):null)+'<small> restant</small>',impTxt)}
   ${mRow(IC.exp,'Export plein',n(v.remF)+'<small> restant</small>',both(v.expF,v.remF))}
   ${mRow(IC.exp,'Export vide',n(v.remE)+'<small> restant</small>',both(v.expE,v.remE))}

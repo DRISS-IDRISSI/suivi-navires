@@ -224,6 +224,12 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.54 — Avancement corrigé avec le programme de la Situation
+- Problème : le rapport de shift ne contient que les mouvements déjà instruits dans le TOS. Les export vides pas encore instruits en sont absents → « restant 0 » et ~99 % alors que le navire est loin d'être fini (ex. MSC ERMINIA III : 2 324 prévus, 1 325 faits au rapport).
+- Correction : pour un navire **Accosté** en **WORKING**, l'application compare le total prévu du fichier Situation à (cumulé + restant du rapport). Si le total prévu est plus grand, l'écart est ajouté au restant (affiché en export vide, dans la limite du programme export vide). Le calcul repart toujours des valeurs d'origine du rapport (idempotent).
+- La vue globale affiche une note « Total prévu d'après la Situation… » quand une correction est appliquée.
+- Limites : la Situation est celle du dernier fichier reçu (08 h) ; le restow est compté dans le cumulé mais pas dans le programme (écart légèrement sous-estimé) ; si le navire dépasse le programme, la correction disparaît d'elle‑même.
+
 ## v7.53 — CIELO DI RABAT = MAERSK
 - CIELO DI RABAT est imposé à MAERSK (le fichier Situation donne D'AMICO, l'armateur propriétaire). Priorité : choix manuel > compagnie imposée > situation > recherche Internet > nom du navire. Le consignataire reste celui de la situation (PACOCEAN).
 
