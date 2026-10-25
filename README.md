@@ -224,6 +224,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.55 — Détail par catégorie daté
+- Vue globale d'un navire : un titre « Détail par catégorie · rapport de shift HH:MM » précède Import / Export plein / Export vide, avec le total des catégories (restant du rapport + écart Situation) et le nombre de mouvements faits par les grues depuis le rapport, qui ne peuvent pas être répartis par catégorie.
+
 ## v7.54 — Avancement corrigé avec le programme de la Situation
 - Problème : le rapport de shift ne contient que les mouvements déjà instruits dans le TOS. Les export vides pas encore instruits en sont absents → « restant 0 » et ~99 % alors que le navire est loin d'être fini (ex. MSC ERMINIA III : 2 324 prévus, 1 325 faits au rapport).
 - Correction : pour un navire **Accosté** en **WORKING**, l'application compare le total prévu du fichier Situation à (cumulé + restant du rapport). Si le total prévu est plus grand, l'écart est ajouté au restant (affiché en export vide, dans la limite du programme export vide). Le calcul repart toujours des valeurs d'origine du rapport (idempotent).

@@ -1234,7 +1234,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.54';
+const APP_V='7.55';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
@@ -1576,6 +1576,7 @@ function mList(s){
    <h3 class="m-h">Liste des escales · ${T==='ALL'?'TCE + TC3':T}</h3>${L.map(card).join('')||(nw.length?'':'<p class="m-note">Aucun navire sur ce terminal dans le dernier rapport.</p>')}${nw.map(ncard).join('')}
    ${O.length?`<h3 class="m-h">Non rattachés à un terminal (${O.length})</h3>${O.map(card).join('')}`:''}<div class="m-free">${free}</div></div>`;
 }
+const hTime2=s=>{ try{ return LT(s,{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } };
 const mRow=(ic,l,main,sub)=>`<div class="m-row">${ic}<div class="m-rl"><b>${l}</b>${sub?`<span>${sub}</span>`:''}</div><div class="m-rv">${main}</div></div>`;
 function mGlob(s,v){
   const p=pct(v), e=eta(v,s), L=LV.get(v), n=x=>x==null?'<i>n/d</i>':fmt(x), both=(a,b)=>`Réalisé ${a==null?'n/d':fmt(a)} · Restant ${b==null?'n/d':fmt(b)}`;
@@ -1586,6 +1587,8 @@ function mGlob(s,v){
     <div class="m-two"><div><b>${fmt(ac(v))}</b><span>faits</span></div><div><b>${fmt(rm(v))}</b><span>restants</span></div><div><b>${v.rem===0?'Terminé':esc(e.txt)}</b><span>${e.clock?'fin vers '+e.clock:'fin estimée'}</span></div></div>
     ${L&&!L.unreliable?`<p class="m-note">Rapport de shift + ${fmt(L.mv)} mouvement(s) des grues jusqu'à ${hTime(L.upto)}${L.gaps?` · ${L.gaps} heure(s) manquante(s)`:''} (estimation)</p>`:L?`<p class="m-note m-w">Mise à jour horaire suspendue : les grues ont fait ${fmt(L.mv)} mouvements depuis le rapport de shift (restant connu ${fmt(v.rem)}). Navire presque terminé, grues réaffectées ou rapport de shift en attente ; chiffres du dernier rapport conservés.</p>`:''}</section>
   ${v.plan?`<p class="m-note">Total prévu d'après la Situation : <b>${fmt(v.plan.total)}</b> mouvements. Le rapport de shift ne compte pas encore <b>${fmt(v.plan.extra)}</b> mouvement(s)${v.plan.extraE?` (export vides non encore instruits : ${fmt(v.plan.extraE)})`:''} : ils sont ajoutés au restant.</p>`:''}
+  <h3 class="m-h">Détail par catégorie · rapport de shift ${hTime2(s)}</h3>
+  <p class="m-note">Restants au dernier rapport de shift${L&&!L.unreliable&&L.mv?`, avant les <b>${fmt(L.mv)}</b> mouvement(s) faits par les grues depuis (impossible de les répartir par catégorie)`:''}. Total des catégories : <b>${fmt(v.rem)}</b> restant${v.plan?` (dont ${fmt(v.plan.extra)} ajoutés d'après la Situation)`:''}.</p>
   ${mRow(IC.imp,'Import',n(v.remImp!=null||v.remImpF!=null?(v.remImp!=null?v.remImp:(v.remImpF||0)+(v.remImpE||0)):null)+'<small> restant</small>',impTxt)}
   ${mRow(IC.exp,'Export plein',n(v.remF)+'<small> restant</small>',both(v.expF,v.remF))}
   ${mRow(IC.exp,'Export vide',n(v.remE)+'<small> restant</small>',both(v.expE,v.remE))}
