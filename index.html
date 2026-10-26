@@ -944,6 +944,7 @@ async function loadSnaps(retry){
   { const sr=await sb.from('situation').select('data').order('ts',{ascending:false}).limit(1); let sx=null;
     if(!sr.error&&sr.data&&sr.data.length) sx=sr.data[0].data; else { try{ sx=JSON.parse(localStorage.getItem('situation')||'null'); }catch(e){} }
     sit=sx; learnArm(); }
+  { ING=[]; if(canImp()){ try{ const ir=await sb.from('ingest_log').select('type,report_id,report_ts,status,reasons').eq('status','rejected').gte('ts',new Date(Date.now()-48*3600000).toISOString()).order('ts',{ascending:false}).limit(20); if(!ir.error&&ir.data) ING=ir.data; }catch(e){} } }
   const sig=JSON.stringify(meta)+JSON.stringify(lm)+'B'+(mbv?mbv.t:'')+'S'+(sit?sit.id:'')+'#'+data.length+':'+(data.length?data[data.length-1].data.id:'')+':'+JSON.stringify(data.slice(-1))+'|'+hd.length+':'+(hd.length?hd[hd.length-1].id:'')+'|R'+rd.length+':'+(rd.length?rd[rd.length-1].id:'')+'|D'+dd.length+':'+(dd.length?dd[dd.length-1].id+':'+dd[dd.length-1].rtg.length+':'+dd[dd.length-1].sc.length+':'+dd[dd.length-1].rtg.reduce((a,r)=>a+r.total,0)+':'+dd[dd.length-1].sc.reduce((a,r)=>a+r.total,0):'');
   if(sig===lastSig) return; lastSig=sig;
   hours=hd; rtgs=rd; drivers=dd; if(!drvKey||!dd.some(x=>x.id===drvKey)) drvKey=dd.length?dd[dd.length-1].id:null; snaps=[]; mergeSnaps(data.map(r=>r.data)); adjPlan(); render();
@@ -1065,6 +1066,47 @@ async function saveSituation(x){
   lastSig=''; await loadSnaps(); return true;
 }
 /* ---------- import ---------- */
+/* ---- v7.56 : controle des rapports a l'entree (meme regles que la fonction ingest-report v13) ---- */
+const isNum=x=>typeof x==='number'&&isFinite(x);
+function vTs(ts,c,label){ const d=(ts-Date.now())/3600000; if(d>3) c.e.push(`${label} daté du futur (+${Math.round(d)} h) : décalage d'horloge ou de fuseau`); else if(d<-72) c.w.push(`${label} ancien de ${Math.round(-d/24)} jour(s)`); }
+function vShift(s,prev){ const c={e:[],w:[]}; vTs(s.ts,c,'Rapport de shift'); const vs=s.vessels||[], seen=new Set(); let bad=0;
+  vs.forEach(v=>{ const nm=v.name||v.visit;
+    if(seen.has(v.visit)) c.e.push(`Escale ${v.visit} en double`); seen.add(v.visit);
+    if(!isNum(v.acc)||!isNum(v.rem)){ bad++; return; }
+    if(v.acc<0||v.rem<0) c.e.push(`${nm} : cumulé ou restant négatif (${v.acc} / ${v.rem})`);
+    if(isNum(v.shiftTotal)&&v.shiftTotal>v.acc+1) c.w.push(`${nm} : mouvements du shift (${v.shiftTotal}) supérieurs au cumulé (${v.acc})`);
+    (v.cranes||[]).forEach(k=>{ if(isNum(k.moves)&&k.moves<0) c.e.push(`${nm} / ${k.id} : mouvements négatifs`); });
+    const p=prev&&(prev.vessels||[]).find(x=>x.visit===v.visit);
+    if(p&&isNum(p.acc)&&isNum(p.rem)&&s.ts>prev.ts&&s.ts-prev.ts<36*3600000){
+      if(v.acc<p.acc-Math.max(50,0.05*p.acc)) c.e.push(`${nm} : cumulé en baisse (${p.acc} → ${v.acc}) par rapport au rapport précédent`);
+      const t0=p.acc+p.rem, t1=v.acc+v.rem; if(Math.abs(t1-t0)>Math.max(200,0.25*t0)) c.w.push(`${nm} : total à manipuler passé de ${t0} à ${t1}`); } });
+  if(vs.length&&bad/vs.length>0.3) c.e.push(`${bad} navire(s) sur ${vs.length} sans cumulé ou restant lisible : colonnes probablement décalées`);
+  return c; }
+function vHourly(h){ const c={e:[],w:[]}; vTs(h.ts,c,'Rapport horaire'); const cr=h.cranes||[]; if(!cr.length) c.e.push('Aucune grue');
+  const toM=x=>{ const m=String(x||'').match(/(\d{1,2}):(\d{2})/); return m?+m[1]*60+ +m[2]:null; }, a=toM(h.from), b=toM(h.to);
+  if(a!=null&&b!=null){ const len=(b-a+1440)%1440; if(len===0||len>180) c.e.push(`Fenêtre horaire de ${len} min (attendu 60)`); }
+  cr.forEach(k=>{ if(!isNum(k.moves)||k.moves<0) c.e.push(`${k.id} : mouvements illisibles`); else if(k.moves>100) c.e.push(`${k.id} : ${k.moves} mouvements en une heure (impossible)`); });
+  return c; }
+/* import manuel : un rapport « impossible » n'est enregistre que si l'utilisateur le confirme */
+const vAsk=(name,c)=>!c.e.length||confirm(`${name} : rapport suspect, probablement erroné.\n\n- ${c.e.slice(0,5).join('\n- ')}\n\nL'importer quand même ?`);
+/* ---- v7.56 : bandeau « flux de donnees » (rapports en retard, rapports refuses) ---- */
+let ING=[];
+const FLOW_T={hour:[90,180],shift:[570,780],sit:[1800,3240]};   /* minutes : alerte, critique */
+const ageTxt=m=>m<90?Math.round(m)+' min':m<2880?Math.floor(m/60)+' h '+String(Math.round(m%60)).padStart(2,'0'):Math.round(m/1440)+' jours';
+const freshMin=()=>{ const t=[lastHour(),lastSnap()].filter(Boolean).map(x=>x.ts); return t.length?(Date.now()-Math.max(...t))/60000:null; };
+const dataStale=()=>{ const m=freshMin(); return m!=null&&m>FLOW_T.hour[1]; };
+function flowItems(){ const now=Date.now(), o=[], h=lastHour(), s=lastSnap();
+  const chk=(k,x,label,act)=>{ if(!x) return; const age=(now-(x.ts))/60000, t=FLOW_T[k], lv=age>t[1]?'crit':age>t[0]?'warn':null; if(lv) o.push([lv,label,`Dernier reçu il y a ${ageTxt(age)}. ${act}`]); };
+  chk('hour',h,'Rapport horaire en retard','Vérifier la tâche Outlook / Power Automate ou appeler le SI. Au-delà de 3 h, les heures de fin estimées sont masquées.');
+  chk('shift',s,'Rapport de shift en retard','Attendu toutes les 8 h : vérifier l\'envoi du rapport de fin de shift.');
+  chk('sit',sit,'Situation des navires ancienne','Le total prévu par navire (correction du restant) peut ne plus être à jour.');
+  if(canImp()){ const rej=ING.filter(r=>r.status==='rejected').filter(r=>{ const rt=Date.parse(r.report_ts)||0; return r.type==='horaire'?!(h&&h.ts>=rt):r.type==='shift'?!(s&&s.ts>=rt):true; });
+    if(rej.length) o.push(['crit',`${rej.length} rapport${rej.length>1?'s':''} refusé${rej.length>1?'s':''} à l'entrée`,rej.slice(0,3).map(r=>`${r.type==='shift'?'Shift':'Horaire'} ${LT({id:r.report_id},{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} : ${(r.reasons||[]).slice(0,2).join(' ; ')}`).join(' — ')+'. Les chiffres affichés viennent du rapport précédent. Vérifier le fichier avec le SI ; pour le forcer, l\'importer à la main.']); }
+  return o; }
+function flowBannerPut(){ let el=document.getElementById('flowBox'); const on=!!session&&!!me&&['pilot','dir','prev','traf'].includes(tab);
+  const it=on?flowItems():[]; if(!it.length){ if(el) el.remove(); return; }
+  if(!el){ el=document.createElement('div'); el.id='flowBox'; el.className='alerts'; el.style.cssText='margin:8px 12px'; $('#app').insertAdjacentElement('beforebegin',el); }
+  const pc={crit:'p-crit',warn:'p-warn'}; el.innerHTML=it.map(a=>`<div class="al"><span class="pill ${pc[a[0]]||'p-warn'}">${esc(a[1])}</span><span>${esc(a[2])}</span></div>`).join(''); }
 async function importFiles(files){
   let ok=0; for(const f of files){
     try{ const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
@@ -1074,8 +1116,8 @@ async function importFiles(files){
       else if(isSitWb(wb)){ if(await saveSituation(parseSituation(wb))) ok++; }
       else if(isDriverWb(wb)){ if(await saveDrivers(parseDrivers(wb))) ok++; }
       else if(isRtgWb(wb)){ if(await saveRtg(parseRtg(wb))) ok++; }
-      else if(isHourlyWb(wb)){ if(await saveHourly(parseHourly(wb))) ok++; }
-      else { const s=parseWorkbook(wb); sel=s.id; await saveSnap(s); ok++; } }
+      else if(isHourlyWb(wb)){ const h=parseHourly(wb); if(vAsk(f.name,vHourly(h))&&await saveHourly(h)) ok++; }
+      else { const s=parseWorkbook(wb); if(vAsk(f.name,vShift(s,snaps.filter(x=>x.ts<s.ts).pop()||null))){ sel=s.id; await saveSnap(s); ok++; } } }
     catch(e){ toast(f.name+' : '+e.message); }
   }
   if(ok){ toast(ok+' rapport'+(ok>1?'s':'')+' importé'+(ok>1?'s':'')); }
@@ -1109,7 +1151,7 @@ function liveCalc(){
     LV.set(v,{mv,n:hs.length,gaps,upto,unreliable,fin:!unreliable&&mv>=v.rem,rem,acc:unreliable?v.acc:tot-rem,rate}); });
 }
 const pct=v=>{ const t=(v.acc||0)+(v.rem||0), l=LV.get(v); if(!t) return null; const p=100*ac(v)/t; return l&&l.fin&&!l.unreliable&&v.rem>0?Math.min(99.9,p):p; };   /* 100 % seulement quand le rapport de shift confirme 0 restant */
-function eta(v,s){ const L=LV.get(v); if(L&&L.unreliable&&v.rem>0) return {txt:'À confirmer',h:null};
+function eta(v,s){ const L=LV.get(v); if(L&&L.unreliable&&v.rem>0) return {txt:'À confirmer',h:null}; if(v.rem>0&&s===lastSnap()&&dataStale()) return {txt:'Données anciennes',h:null};
   const R=L&&!L.unreliable?L:null, rem=R?R.rem:v.rem, rate=R&&R.rate>0?R.rate:act(v).reduce((a,c)=>a+(c.gmph||0),0), base=R?lt(R.upto):lt(s);
   if(!rem) return {txt:R?'Fin imminente':'Terminé',h:0}; if(!rate) return {txt:'—',h:null};
   const h=rem/rate, t=new Date(base+h*3600000), mm=Math.round(h*60);
@@ -1161,8 +1203,6 @@ function estimate(v,s){
 }
 function hourlyAlerts(){
   const out=[], h=lastHour(); if(!h) return out;
-  const age=(Date.now()-h.ts)/60000;
-  if(age>100) out.push(['warn','Rapport horaire en retard',`Dernier rapport horaire reçu : ${hTime(h,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} (fenêtre ${h.from}–${h.to}), il y a ${Math.round(age/60)} h. Vérifier l'arrivée des e-mails.`]);
   const cv=craneVessel(), prev=hours[hours.length-2];
   h.cranes.forEach(c=>{
     const v=cv.get(c.id), working=v&&v.rem>10; /* navire presque termine : pas d'alerte d'arret */ if(!v) return; /* grue non affectée à un navire en cours : ignorée */
@@ -1234,7 +1274,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.55';
+const APP_V='7.56';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
@@ -1721,7 +1761,8 @@ function renderPrev(){
 }
 function bindSit(){ document.querySelectorAll('[data-dep]').forEach(b=>b.onclick=()=>{ if(confirm('Marquer ce navire comme appareillé ? Il disparaîtra des listes (jusqu\'à la prochaine situation).')) setDep(b.dataset.dep,true); }); const f=$('#sitFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; }
 /* ---------- render ---------- */
-function render(){
+function render(){ render0(); flowBannerPut(); }
+function render0(){
   const on=!!session&&!!me; ['#btnImport','#btnXlsx','#btnPdf','#btnOut','#snapSel','#tabs'].forEach(q=>$(q).hidden=!on);
   if(session&&!me){ $('#btnOut').hidden=false; $('#drop').hidden=true; $('#termSeg').hidden=true; $('#btnMob').hidden=true; $('#btnPwd').hidden=true; $('#sub').textContent=meState==='load'?'Chargement…':'Accès refusé';
     $('#app').innerHTML=meState==='load'?'<div class="empty"><b>Chargement…</b></div>':`<div class="empty"><b>Compte non autorisé</b>Votre compte (${esc(idOf(session.user.email))}) n'est pas activé ou a été désactivé. Contactez l'administrateur de l'application.</div>`; return; }
@@ -2038,7 +2079,7 @@ async function loadProfile(){
 function start(){ if(!session){ me=null; meState='load'; render(); return; } loadProfile().then(()=>{ if(me) loadSnaps(); else render(); if(me&&me.doit_changer_mdp&&!me.legacy) forcePwd(); }); }
 sb.auth.getSession().then(({data})=>{ session=data.session; start(); });
 sb.auth.onAuthStateChange((ev,s)=>{ if(ev==='USER_UPDATED'){ session=s; return; } if(!s) closeModal(); session=s; lastSig=''; start(); });
-setInterval(()=>{ if(session) loadSnaps(); },60000);
+setInterval(()=>{ if(session){ loadSnaps().then(()=>flowBannerPut()); } },60000);
 /* au retour sur l'application (téléphone sorti de veille) : renouveler la session puis recharger */
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&session){ sb.auth.getSession().then(({data})=>{ if(data.session){ session=data.session; loadSnaps(); } }); } });
 if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));

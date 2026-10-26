@@ -224,6 +224,14 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.56 — Contrôle des rapports à l'entrée + bandeau « flux de données »
+- **Fonction `ingest-report` v13** (à coller dans Supabase, voir `CODE_FONCTION_ingest-report_v13_...txt`) : avant d'enregistrer un rapport de shift ou horaire, elle vérifie qu'il est possible. Rejet seulement pour l'impossible : date dans le futur de plus de 3 h, cumulé ou restant négatif, escale en double, cumul qui baisse de plus de 5 % (et 50) par rapport au rapport précédent, plus de 30 % des navires sans cumulé/restant lisible (colonnes décalées), fenêtre horaire absurde, grue à plus de 100 mouvements/heure. Le reste (total à manipuler qui change beaucoup, restant ≠ somme des catégories, rapport ancien…) est enregistré avec un avertissement.
+- Un rapport rejeté n'est pas enregistré : réponse HTTP 200 avec `ok:false, rejected:true` (la boîte mail ne le réessaie pas en boucle) et une ligne est écrite dans la table `ingest_log` (script `SUPABASE_table_ingest_log.sql`, à exécuter avant ou après : sans la table, la fonction continue de travailler). Pour forcer un rapport : l'importer à la main dans l'application (confirmation demandée) ou ajouter `"force": true` au corps de la requête.
+- **Application** : bandeau en haut des écrans Pilotage / Direction / Prévisions / Trafic quand le rapport horaire a plus de 90 min (critique à 3 h), le rapport de shift plus de 9 h 30 (critique à 13 h), la Situation plus de 30 h (critique à 54 h). Chaque alerte dit quoi faire. Les comptes responsable/administrateur voient aussi les rapports refusés des 48 dernières heures (le bandeau disparaît quand un rapport plus récent est arrivé).
+- Quand aucun rapport (horaire ou shift) n'est arrivé depuis plus de 3 h, l'heure de fin estimée des navires est remplacée par « Données anciennes ».
+- Import manuel : mêmes contrôles ; si le rapport est suspect, l'application demande confirmation avant de l'enregistrer.
+- L'ancienne alerte « Rapport horaire en retard » (100 min) est remplacée par le bandeau.
+
 ## v7.55 — Détail par catégorie daté
 - Vue globale d'un navire : un titre « Détail par catégorie · rapport de shift HH:MM » précède Import / Export plein / Export vide, avec le total des catégories (restant du rapport + écart Situation) et le nombre de mouvements faits par les grues depuis le rapport, qui ne peuvent pas être répartis par catégorie.
 
