@@ -1234,7 +1234,9 @@ async function saveN4Units(ev){ if(!ev.length) return ''; const m=new Map(); ev.
   return ''; }
 let ctnQ='', ctnRes=null, ctnSel=null, ctnMsg='', ctnBusy=false;
 const ctnFmt=u=>/^[A-Z]{4}\d{7}$/.test(u)?u.slice(0,4)+' '+u.slice(4):u;
-const ctnPos=p=>{ const m=String(p||'').match(/^V-\d+-(\d{2})(\d{2})(\d{2})$/); return m?`navire baie ${m[1]} · rang ${m[2]} · niveau ${m[3]}`:(String(p||'').replace(/^Y-/,'parc ')||'—'); };
+const ctnYard=p=>String(p||'').replace(/^Y-[A-Z0-9]+-/,'');   /* Y-TCC-BZ083B07 -> BZ083B07 (langage habituel du parc) */
+const ctnPos=p=>{ const m=String(p||'').match(/^V-\d+-(\d{2})(\d{2})(\d{2})$/); return m?`navire baie ${m[1]} · rang ${m[2]} · niveau ${m[3]}`:(p?'position '+ctnYard(p):'—'); };
+const ctnShort=p=>{ const m=String(p||'').match(/^V-\d+-(\d{2})(\d{2})(\d{2})$/); return m?`navire ${m[1]}-${m[2]}-${m[3]}`:(ctnYard(p)||'—'); };
 const ctnDate=t=>t?t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4)+' à '+t.slice(11,16):'—';
 async function ctnSearch(){
   const q=String(ctnQ||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(q.length<4){ ctnMsg='Tapez au moins 4 caractères (marque et numéro, ex. MSNU 1413349, ou seulement une partie du numéro).'; ctnRes=null; ctnSel=null; render(); return; }
@@ -1251,7 +1253,7 @@ function ctnCard(u,E){
   if(L) sum.push(`<b>Export</b> · chargé le <b>${ctnDate(L.t)}</b> sur le ${esc(vn(L.visit))}, pris en <b>${esc(ctnPos(L.pos_from))}</b>.`);
   if(D&&L&&L.t>D.t) sum.push('Le conteneur est arrivé puis reparti par navire (transit ou réexpédition).');
   return `<section class="m-box"><div class="m-big" style="font-size:24px"><strong>${esc(ctnFmt(u))}</strong></div><p class="m-note" style="margin:2px 0 8px">${esc(x.len)}' · ${frt} · compagnie ${esc(n4Line(x.line))} · terminal ${esc(x.term||'—')}</p>${sum.map(h=>`<p style="margin:6px 0">${h}</p>`).join('')||'<p class="m-note">Aucun mouvement navire (déchargement ou chargement) enregistré.</p>'}</section>
-  <section class="m-box"><b class="tr-h">Historique des mouvements navire</b><table class="tr-t"><thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Mouvement</th></tr></thead><tbody>${ev.map(e=>`<tr><td style="text-align:left;white-space:nowrap">${ctnDate(e.t)}</td><td style="text-align:left"><b>${lab[e.kind]||e.kind}</b> ${esc(vn(e.visit))}${e.crane?' · grue '+esc(e.crane):''}<br><span class="vv">${esc(e.cat||'')} · de ${esc(e.pos_from||'—')} vers ${esc(e.pos_to||'—')}</span></td></tr>`).join('')}</tbody></table></section>`; }
+  <section class="m-box"><b class="tr-h">Historique des mouvements navire</b><table class="tr-t"><thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Mouvement</th></tr></thead><tbody>${ev.map(e=>`<tr><td style="text-align:left;white-space:nowrap">${ctnDate(e.t)}</td><td style="text-align:left"><b>${lab[e.kind]||e.kind}</b> ${esc(vn(e.visit))}${e.crane?' · grue '+esc(e.crane):''}<br><span class="vv">${esc(e.cat||'')} · de ${esc(ctnShort(e.pos_from))} vers ${esc(ctnShort(e.pos_to))}</span></td></tr>`).join('')}</tbody></table></section>`; }
 function renderCtn(){
   if(!canDrv()){ tab='pilot'; render(); return; }
   const app=$('#app'); document.body.classList.add('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
@@ -1432,7 +1434,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.60';
+const APP_V='7.61';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
