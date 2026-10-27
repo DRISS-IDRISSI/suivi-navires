@@ -1133,10 +1133,13 @@ function parseN4(wb){
   const R=XLSX.utils.sheet_to_json(wb.Sheets.MOVE,{header:1,raw:true,defval:''}), hi=R.findIndex(r=>String(r[0]).trim()==='Time Completed'); if(hi<0) throw new Error('En-tête « Time Completed » introuvable.');
   const H=R[hi].map(x=>String(x).trim()), col=n=>H.indexOf(n), need=['Time Completed','Move Kind','Unit Category','Unit Frght Kind','Unit Type Length','Carrier TERMINAL','Carrier Visit','Line Op'];
   const miss=need.filter(n=>col(n)<0); if(miss.length) throw new Error('Colonnes N4 absentes : '+miss.join(', ')+'.');
-  const cT=col('Time Completed'),cK=col('Move Kind'),cC=col('Unit Category'),cF=col('Unit Frght Kind'),cL=col('Unit Type Length'),cTe=col('Carrier TERMINAL'),cV=col('Carrier Visit'),cO=col('Line Op'),cE=col('Event Type'),cX=col('Exclude');
+  const cT=col('Time Completed'),cK=col('Move Kind'),cC=col('Unit Category'),cF=col('Unit Frght Kind'),cL=col('Unit Type Length'),cTe=col('Carrier TERMINAL'),cV=col('Carrier Visit'),cO=col('Line Op'),cE=col('Event Type'),cX=col('Exclude')
+  const cU=col('Unit Nbr'),cCr=col('Crane CHE'),cFp=col('From Position'),cTp=col('To Position'), units=[];
   const agg=new Map(), p2=x=>String(x).padStart(2,'0'); let mn=Infinity,mx=-Infinity,t0='',t1='',n=0,bad=0,rs=0,ex=0;
   for(let i=hi+1;i<R.length;i++){ const r=R[i], ts=String(r[cT]||''); if(!ts) continue; const m=ts.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); if(!m){ bad++; continue; }
-    if(cE>=0&&/SHIFT_ON_CARRIER/i.test(String(r[cE]))){ rs++; continue; } if(cX>=0&&/^y/i.test(String(r[cX]).trim())){ ex++; continue; }
+    const isRs=cE>=0&&/SHIFT_ON_CARRIER/i.test(String(r[cE]));
+    if(cU>=0&&String(r[cU]).trim()){ const tc0=String(r[cTe]).trim(), ln0=String(r[cL]).trim(); units.push({unit:String(r[cU]).trim().toUpperCase(),t:ts.slice(0,16),kind:isRs?'S':/^disch/i.test(String(r[cK]))?'D':'L',cat:String(r[cC]).trim(),frt:/^empty/i.test(String(r[cF]))?'E':'F',len:/^20/.test(ln0)?'20':/^45/.test(ln0)?'45':'40',term:N4_TERM[tc0]||tc0,visit:String(r[cV]).trim().replace(/\.0+$/,''),crane:cCr>=0?String(r[cCr]).trim():'',pos_from:cFp>=0?String(r[cFp]).trim():'',pos_to:cTp>=0?String(r[cTp]).trim():'',line:String(r[cO]).trim()}); }
+    if(isRs){ rs++; continue; } if(cX>=0&&/^y/i.test(String(r[cX]).trim())){ ex++; continue; }
     const ms=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5]); if(ms<mn){ mn=ms; t0=ts.slice(0,16); } if(ms>mx){ mx=ms; t1=ts.slice(0,16); }
     const d=new Date(ms-7*3600000), day=d.toISOString().slice(0,10), s=Math.floor(d.getUTCHours()/8)+1;
     const disch=/^disch/i.test(String(r[cK])), emp=/^empty/i.test(String(r[cF])), cat=/^through/i.test(String(r[cC]))?'T':disch?(emp?'IV':'IP'):(emp?'EV':'EP');
@@ -1146,7 +1149,7 @@ function parseN4(wb){
   const vis={}; if(wb.SheetNames.includes('ESCALE')){ const E=XLSX.utils.sheet_to_json(wb.Sheets.ESCALE,{header:1,raw:true,defval:''}), eh=E.findIndex(r=>String(r[0]).trim()==='Visit');
     if(eh>=0) for(let i=eh+1;i<E.length;i++){ const v=String(E[i][0]).trim().replace(/\.0+$/,''); if(v) vis[v]={n:String(E[i][2]).trim(),l:String(E[i][1]).trim()}; } }
   const by={}; let evp=0; agg.forEach(a=>{ const ym=a[0].slice(0,7); (by[ym]||(by[ym]={rows:[],vis:{}})).rows.push(a); evp+=n4Evp(a); if(vis[a[3]]) by[ym].vis[a[3]]=vis[a[3]]; });
-  return {byMonth:by,fileMin:mn,fileMax:mx,t0,t1,mv:n,evp,bad,rs,ex};
+  return {byMonth:by,fileMin:mn,fileMax:mx,t0,t1,mv:n,evp,bad,rs,ex,units};
 }
 /* fusion avec ce qui est deja enregistre : un shift complet du nouveau fichier remplace l'ancien ; un shift partiel (debut ou fin du fichier) ne remplace jamais un shift plus complet, et un shift partiel sans ancienne donnee est ecarte (sauf le shift en cours) */
 function n4Merge(old,add){
@@ -1162,7 +1165,8 @@ function n4Merge(old,add){
 async function saveN4(p,name){
   if(!monLoaded) await loadMonthly(); let ok=0, skipped=0;
   for(const ym of Object.keys(p.byMonth).sort()){ const r=n4Merge(mon['n4-'+ym],Object.assign({},p.byMonth[ym],{ym,asof:todayCasa(),src:name,fileMin:p.fileMin,fileMax:p.fileMax,t0:p.t0,t1:p.t1})); skipped+=r.skipped; if(r.doc&&await saveMonthly(r.doc)) ok++; }
-  trMode='n4'; tab='traf'; toast(`N4 : ${p.mv.toLocaleString('fr-FR')} mouvements, ${Math.round(p.evp).toLocaleString('fr-FR')} EVP (${p.t0.slice(0,10)} → ${p.t1.slice(0,10)}).`+(skipped?` ${skipped} shift partiel(s) de début de fichier écarté(s).`:'')); render(); return ok>0;
+  const ue=await saveN4Units(p.units||[]);
+  trMode='n4'; tab='traf'; toast(`N4 : ${p.mv.toLocaleString('fr-FR')} mouvements, ${Math.round(p.evp).toLocaleString('fr-FR')} EVP (${p.t0.slice(0,10)} → ${p.t1.slice(0,10)}).`+(skipped?` ${skipped} shift partiel(s) de début de fichier écarté(s).`:'')+(ue?' Conteneurs non enregistrés : '+ue:'')); render(); return ok>0;
 }
 /* ---- v7.58 : ecran « Trafic reel (N4) » ---- */
 let trMode='cmp', n4Per=null, n4From='', n4To='', n4Sh='ALL', n4By='cie';
@@ -1222,6 +1226,44 @@ function n4Export(){ const X=window.__n4X; if(!X) return; const wb=XLSX.utils.bo
   add('Par jour',[['Jour','TC3 EVP','TCE EVP','Mouvements','EVP'],...X.days.map(d=>[d.d,N(d.TC3||0),N(d.TCE||0),d.mv,N(d.t)])]);
   add('Par shift',[['Shift','Mouvements','EVP'],...X.byS.map(o=>[(N4_SH.find(x=>x[0]===o.k)||[0,'S'+o.k])[1],o.mv,N(o.evp)])]);
   XLSX.writeFile(wb,`Trafic_N4_${X.a}_${X.b}.xlsx`); }
+/* ---- v7.59 : historique par conteneur (table n4_moves) + onglet « Conteneur » ---- */
+async function saveN4Units(ev){ if(!ev.length) return ''; const m=new Map(); ev.forEach(e=>m.set(e.unit+'|'+e.t+'|'+e.kind,e)); const A=[...m.values()];
+  for(let i=0;i<A.length;i+=1000){ const {error}=await sb.from('n4_moves').upsert(A.slice(i,i+1000),{onConflict:'unit,t,kind'});
+    if(error) return /relation|does not exist|schema cache/i.test(error.message)?'table n4_moves absente (exécuter SUPABASE_table_n4_moves.sql)':error.message;
+    if(i&&i%10000===0) toast(`Enregistrement des conteneurs… ${i.toLocaleString('fr-FR')} / ${A.length.toLocaleString('fr-FR')}`); }
+  return ''; }
+let ctnQ='', ctnRes=null, ctnSel=null, ctnMsg='', ctnBusy=false;
+const ctnFmt=u=>/^[A-Z]{4}\d{7}$/.test(u)?u.slice(0,4)+' '+u.slice(4):u;
+const ctnPos=p=>{ const m=String(p||'').match(/^V-\d+-(\d{2})(\d{2})(\d{2})$/); return m?`navire baie ${m[1]} · rang ${m[2]} · niveau ${m[3]}`:(String(p||'').replace(/^Y-/,'parc ')||'—'); };
+const ctnDate=t=>t?t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4)+' à '+t.slice(11,16):'—';
+async function ctnSearch(){
+  const q=String(ctnQ||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(q.length<4){ ctnMsg='Tapez au moins 4 caractères (marque et numéro, ex. MSNU 1413349, ou seulement une partie du numéro).'; ctnRes=null; ctnSel=null; render(); return; }
+  ctnBusy=true; ctnMsg=''; render();
+  const r=await sb.from('n4_moves').select('*').ilike('unit','%'+q+'%').order('t',{ascending:false}).limit(400); ctnBusy=false;
+  if(r.error){ ctnMsg=/relation|does not exist|schema cache/i.test(r.error.message)?'La table des conteneurs n\'existe pas encore : exécutez SUPABASE_table_n4_moves.sql dans Supabase, puis réimportez le fichier MoveEvent.':'Recherche impossible : '+r.error.message; ctnRes=null; render(); return; }
+  const by={}; (r.data||[]).forEach(e=>{ (by[e.unit]||(by[e.unit]=[])).push(e); }); ctnRes=by; const ks=Object.keys(by); ctnSel=ks.length===1?ks[0]:(by[q]?q:null);
+  if(!ks.length) ctnMsg='Aucun mouvement navire trouvé pour « '+q+' » dans les fichiers N4 importés.'; render(); }
+function ctnCard(u,E){
+  const docs=Object.values(mon).filter(x=>x&&x.kind==='n4'), vis=Object.assign({},...docs.map(d=>d.vis||{})), vn=v=>(vis[v]&&vis[v].n)||('escale '+v);
+  const ev=E.slice().sort((a,b)=>a.t<b.t?-1:1), mv=ev.filter(e=>e.kind!=='S'), D=mv.filter(e=>e.kind==='D').pop(), L=mv.filter(e=>e.kind==='L').pop(), x=ev[ev.length-1];
+  const lab={D:'Déchargé du navire',L:'Chargé sur le navire',S:'Restow à bord'}, frt=x.frt==='E'?'vide':'plein';
+  const sum=[]; if(D) sum.push(`<b>Import</b> · déchargé le <b>${ctnDate(D.t)}</b> du ${esc(vn(D.visit))}, déposé en <b>${esc(ctnPos(D.pos_to))}</b>.`);
+  if(L) sum.push(`<b>Export</b> · chargé le <b>${ctnDate(L.t)}</b> sur le ${esc(vn(L.visit))}, pris en <b>${esc(ctnPos(L.pos_from))}</b>.`);
+  if(D&&L&&L.t>D.t) sum.push('Le conteneur est arrivé puis reparti par navire (transit ou réexpédition).');
+  return `<section class="m-box"><div class="m-big" style="font-size:24px"><strong>${esc(ctnFmt(u))}</strong></div><p class="m-note" style="margin:2px 0 8px">${esc(x.len)}' · ${frt} · compagnie ${esc(n4Line(x.line))} · terminal ${esc(x.term||'—')}</p>${sum.map(h=>`<p style="margin:6px 0">${h}</p>`).join('')||'<p class="m-note">Aucun mouvement navire (déchargement ou chargement) enregistré.</p>'}</section>
+  <section class="m-box"><b class="tr-h">Historique des mouvements navire</b><table class="tr-t"><thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Mouvement</th></tr></thead><tbody>${ev.map(e=>`<tr><td style="text-align:left;white-space:nowrap">${ctnDate(e.t)}</td><td style="text-align:left"><b>${lab[e.kind]||e.kind}</b> ${esc(vn(e.visit))}${e.crane?' · grue '+esc(e.crane):''}<br><span class="vv">${esc(e.cat||'')} · de ${esc(e.pos_from||'—')} vers ${esc(e.pos_to||'—')}</span></td></tr>`).join('')}</tbody></table></section>`; }
+function renderCtn(){
+  if(!canDrv()){ tab='pilot'; render(); return; }
+  const app=$('#app'); document.body.classList.add('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
+  if(!monLoaded){ app.innerHTML=mTop('Conteneur','Chargement…',false,true)+'<div class="m-body"><div class="empty"><b>Chargement…</b></div></div>'; mBind(); loadMonthly().then(()=>render()).catch(()=>{ monLoaded=true; render(); }); return; }
+  const docs=Object.values(mon).filter(x=>x&&x.kind==='n4').sort((a,b)=>a.ym<b.ym?-1:1), cov=docs.length?`${esc(String(docs[0].t0||docs[0].first).slice(0,10))} → ${esc(String(docs[docs.length-1].t1||docs[docs.length-1].last).slice(0,10))}`:'aucune donnée importée';
+  const ks=ctnRes?Object.keys(ctnRes):[], list=ctnRes&&!ctnSel&&ks.length>1?`<section class="m-box"><b class="tr-h">${ks.length>=100?'Plus de 100 conteneurs : précisez la recherche':ks.length+' conteneurs trouvés'}</b><table class="tr-t"><tbody>${ks.slice(0,100).map(u=>{ const e=ctnRes[u].slice().sort((a,b)=>a.t<b.t?1:-1)[0]; return `<tr><td style="text-align:left"><a href="#" data-ctn="${esc(u)}"><b>${esc(ctnFmt(u))}</b></a></td><td style="text-align:left">${esc(n4Line(e.line))} · ${esc(e.len)}'</td><td>${ctnDate(e.t).slice(0,10)}</td></tr>`; }).join('')}</tbody></table></section>`:'';
+  app.innerHTML=mTop('Conteneur','Recherche par numéro',false,true)+`<div class="m-body"><div class="m-date" style="display:flex;gap:6px"><input type="search" id="ctnQ" value="${esc(ctnQ)}" placeholder="Marque + numéro (MSNU 1413349)" autocomplete="off" autocapitalize="characters" style="flex:1;min-width:0"><button type="button" class="m-go" id="ctnGo">${ctnBusy?'…':'CHERCHER'}</button></div>`
+   +(ctnMsg?`<p class="m-note m-w">${esc(ctnMsg)}</p>`:'')+list+(ctnSel&&ctnRes&&ctnRes[ctnSel]?ctnCard(ctnSel,ctnRes[ctnSel]):'')
+   +`<p class="m-note">Source : mouvements navire du TOS N4 importés (${cov}) : déchargement (import), chargement (export) et restow, avec l'emplacement enregistré au moment du mouvement. La position actuelle au parc et les dates de sortie ou d'entrée par la porte ne sont pas dans ce fichier : il faudrait un export N4 d'inventaire des conteneurs pour les afficher.</p></div>`;
+  mBind(); const i=$('#ctnQ'); if(i){ i.oninput=e=>{ ctnQ=e.target.value; }; i.onkeydown=e=>{ if(e.key==='Enter'){ ctnQ=i.value; ctnSearch(); } }; }
+  const g=$('#ctnGo'); if(g) g.onclick=()=>{ ctnQ=i.value; ctnSearch(); };
+  document.querySelectorAll('[data-ctn]').forEach(a=>a.onclick=e=>{ e.preventDefault(); ctnSel=a.dataset.ctn; render(); window.scrollTo(0,0); }); }
 async function importFiles(files){
   let ok=0; for(const f of files){
     try{ if(f.size>1500000){ toast('Lecture du fichier volumineux, patientez quelques secondes…'); await new Promise(r=>setTimeout(r,60)); } const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
@@ -1390,7 +1432,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.58';
+const APP_V='7.59';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
@@ -1884,8 +1926,8 @@ function render0(){
     $('#app').innerHTML=meState==='load'?'<div class="empty"><b>Chargement…</b></div>':`<div class="empty"><b>Compte non autorisé</b>Votre compte (${esc(idOf(session.user.email))}) n'est pas activé ou a été désactivé. Contactez l'administrateur de l'application.</div>`; return; }
   $('#btnImport').hidden=!on||!canImp(); $('#btnPwd').hidden=!on; $('#drop').hidden=!on||!canImp()||(tab!=='ana'&&tab!=='drv');
   if(!on){ showLogin(); return; }
-  { const T=[['dir','Direction'],['pilot','Pilotage'],['prev','Prévisions']]; if(canDrv()) T.push(['traf','Trafic'],['drv','Conducteurs']); T.push(['ana','Analyse']); if(isAdmin()) T.push(['acc','Comptes']);
-    if(!T.some(x=>x[0]===tab)) tab='pilot'; document.body.classList.toggle('dirmode',tab==='dir'); if(tab!=='dir'&&tab!=='prev'&&tab!=='traf'){ document.body.classList.remove('mobpilot'); document.body.classList.remove('dirwide'); } $('#tabs').innerHTML=T.map(x=>`<button type="button" data-tab="${x[0]}">${x[1]}</button>`).join(''); }
+  { const T=[['dir','Direction'],['pilot','Pilotage'],['prev','Prévisions']]; if(canDrv()) T.push(['traf','Trafic'],['ctn','Conteneur'],['drv','Conducteurs']); T.push(['ana','Analyse']); if(isAdmin()) T.push(['acc','Comptes']);
+    if(!T.some(x=>x[0]===tab)) tab='pilot'; document.body.classList.toggle('dirmode',tab==='dir'); if(tab!=='dir'&&tab!=='prev'&&tab!=='traf'&&tab!=='ctn'){ document.body.classList.remove('mobpilot'); document.body.classList.remove('dirwide'); } $('#tabs').innerHTML=T.map(x=>`<button type="button" data-tab="${x[0]}">${x[1]}</button>`).join(''); }
   document.querySelectorAll('#tabs [data-tab]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.tab===tab); b.onclick=()=>{tab=b.dataset.tab;try{ history.replaceState(null,'',tab==='dir'?'#direction':location.pathname+location.search); }catch(e){} render();window.scrollTo(0,0);}; });
   const sx=$('#snapSel'); sx.innerHTML=snaps.slice().reverse().map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${LT(s,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${esc(s.shift)}</option>`).join('')||'<option>—</option>';
   if(tab!=='acc') accLoaded=false;
@@ -1894,6 +1936,7 @@ function render0(){
   if(tab==='dir'){ renderDir(); return; }
   if(tab==='prev'){ renderPrev(); return; }
   if(tab==='traf'){ renderTraf(); return; }
+  if(tab==='ctn'){ renderCtn(); return; }
   liveCalc(); document.body.classList.remove('mobpilot'); { const sg=$('#termSeg'); sg.hidden=!(session&&me&&myTerms().length>1&&(tab==='pilot'||tab==='drv')); sg.querySelectorAll('[data-t]').forEach(b=>{ b.setAttribute('aria-pressed',b.dataset.t===termSel()); b.onclick=()=>setTerm(b.dataset.t); }); } $('#btnMob').hidden=!fullView();
   const s=cur(), app=$('#app');
   if(!s){ $('#sub').textContent='Aucun rapport chargé';
