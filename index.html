@@ -1432,7 +1432,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.59';
+const APP_V='7.60';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
@@ -1731,7 +1731,7 @@ const IC={
 function mTop(title,sub,back,noChip){
   return `<div class="m-top"><button type="button" class="m-ic" data-m="${back?'back':'menu'}" aria-label="${back?'Retour':'Menu'}">${back?'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'}</button>
     <div class="m-t"><b>SUIVI OPS</b> NAVIRE</div>${noChip?'<span style="width:44px"></span>':`<button type="button" class="m-chip" data-m="term" aria-label="Changer de terminal">${termSel()==='ALL'?'TCE+TC3':termSel()}${myTerms().length>1?' ⇄':''}</button>`}</div>
-  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab!=='pilot'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':''}${tab!=='dir'?'<button type="button" data-m="dir">Direction</button>':''}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="prev">Prévisions (situation 8 h)</button>${canDrv()?'<button type="button" data-m="traf">Trafic · comparaison 2025</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
+  ${mMenu?`<div class="m-menu"><button type="button" data-m="ref">Actualiser</button>${tab!=='pilot'?'<button type="button" data-m="pilot">Pilotage (escales)</button>':''}${tab!=='dir'?'<button type="button" data-m="dir">Direction</button>':''}${canDrv()?'<button type="button" data-m="drv">Conducteurs</button>':''}<button type="button" data-m="prev">Prévisions (situation 8 h)</button>${canDrv()?'<button type="button" data-m="traf">Trafic · comparaison 2025</button><button type="button" data-m="ctn">Conteneur · recherche par numéro</button>':''}<button type="button" data-m="ana">Analyse</button>${isAdmin()?'<button type="button" data-m="acc">Comptes</button>':''}<button type="button" data-m="pwd">Mon compte · mot de passe</button><button type="button" data-m="reset">Recharger l'application (vider le cache)</button><button type="button" data-m="full">Version complète (tableaux détaillés)</button><button type="button" data-m="out">Déconnexion</button></div>`:''}
   <div class="m-sub">${title}${sub?`<small>${sub}</small>`:''}</div>`;
 }
 async function hardReload(){ toast('Rechargement…'); try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){} location.reload(); }
@@ -1748,7 +1748,7 @@ function mBind(){ tselBind();
     if(a==='ref'){ lastSig=''; monLoaded=false; if(tab==='traf') render(); loadSnaps(); toast('Actualisation…'); return; }
     if(a==='pwd'){ pwdModal(); return; }
     if(a==='reset'){ hardReload(); return; }
-    if(a==='drv'||a==='ana'||a==='acc'||a==='dir'||a==='prev'||a==='traf'){ tab=a; if(a==='dir'){ try{ history.replaceState(null,'','#direction'); }catch(e){} } render(); window.scrollTo(0,0); return; }
+    if(a==='drv'||a==='ana'||a==='acc'||a==='dir'||a==='prev'||a==='traf'||a==='ctn'){ tab=a; if(a==='dir'){ try{ history.replaceState(null,'','#direction'); }catch(e){} } render(); window.scrollTo(0,0); return; }
     if(a==='pilot'){ tab='pilot'; mScr='list'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} render(); window.scrollTo(0,0); return; }
     if(a==='full'){ try{ localStorage.setItem('fullView','1'); }catch(e){} if(tab==='dir'){ tab='pilot'; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} } render(); return; }
     if(a==='out'){ sb.auth.signOut(); return; }

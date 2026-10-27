@@ -224,6 +224,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.60 — Accès à l'onglet Conteneur depuis le téléphone
+- Le menu ☰ du téléphone contient maintenant « Conteneur · recherche par numéro » (en v7.59, l'onglet n'existait que dans la barre d'onglets de la version complète).
+
 ## v7.59 — Onglet « Conteneur » (recherche par numéro)
 - Nouvel onglet **Conteneur** (comptes responsable/administrateur) : taper la marque et le numéro (ex. `MSNU 1413349`) ou seulement une partie du numéro (4 caractères minimum). Affiche : taille, plein/vide, compagnie, terminal, date et navire du **déchargement (import)**, date et navire du **chargement (export)**, **emplacement** enregistré au moment du mouvement (bloc de parc, ou baie/rang/niveau sur le navire), et l'historique complet des mouvements navire (grue, de → vers).
 - Données : chaque import d'un fichier « MoveEvent » (Trafic → Trafic réel (N4)) enregistre aussi les mouvements par conteneur dans la table `n4_moves` (script `SUPABASE_table_n4_moves.sql` à exécuter une fois). Clé (conteneur, heure, type) : réimporter le même fichier ne crée pas de doublon. Environ 44 000 lignes par mois (≈ 7 Mo) ; l'import dure plus longtemps (par paquets de 1 000 lignes).
