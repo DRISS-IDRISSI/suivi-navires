@@ -1252,7 +1252,9 @@ function ctnCard(u,E){
   const sum=[]; if(D) sum.push(`<b>Import</b> · déchargé le <b>${ctnDate(D.t)}</b> du ${esc(vn(D.visit))}, déposé en <b>${esc(ctnPos(D.pos_to))}</b>.`);
   if(L) sum.push(`<b>Export</b> · chargé le <b>${ctnDate(L.t)}</b> sur le ${esc(vn(L.visit))}, pris en <b>${esc(ctnPos(L.pos_from))}</b>.`);
   if(D&&L&&L.t>D.t) sum.push('Le conteneur est arrivé puis reparti par navire (transit ou réexpédition).');
-  return `<section class="m-box"><div class="m-big" style="font-size:24px"><strong>${esc(ctnFmt(u))}</strong></div><p class="m-note" style="margin:2px 0 8px">${esc(x.len)}' · ${frt} · compagnie ${esc(n4Line(x.line))} · terminal ${esc(x.term||'—')}</p>${sum.map(h=>`<p style="margin:6px 0">${h}</p>`).join('')||'<p class="m-note">Aucun mouvement navire (déchargement ou chargement) enregistré.</p>'}</section>
+  const isV=p=>/^V-/.test(String(p||'')); let pp=null; ev.slice().reverse().some(e=>{ if(e.kind==='D'&&e.pos_to&&!isV(e.pos_to)){ pp={c:ctnYard(e.pos_to),t:e.t,w:'après déchargement'}; return true; } if(e.kind==='L'&&e.pos_from&&!isV(e.pos_from)){ pp={c:ctnYard(e.pos_from),t:e.t,w:'avant chargement'}; return true; } return false; });
+  const posBox=`<div style="background:#1f3a6d;color:#fff;border-radius:14px;padding:10px 12px;margin:8px 0 10px;text-align:center"><div style="font-size:12px;letter-spacing:.1em;opacity:.85">POSITION</div>${pp?`<div style="font-size:40px;font-weight:800;letter-spacing:.04em;line-height:1.15">${esc(pp.c)}</div><div style="font-size:12px;opacity:.85">dernière position enregistrée · ${ctnDate(pp.t)} (${pp.w})</div>`:'<div style="font-size:18px;font-weight:700;margin:6px 0">Non disponible</div><div style="font-size:12px;opacity:.85">aucune position de parc dans les mouvements importés</div>'}</div>`;
+  return `<section class="m-box"><div class="m-big" style="font-size:24px"><strong>${esc(ctnFmt(u))}</strong></div><p class="m-note" style="margin:2px 0 0">${esc(x.len)}' · ${frt} · compagnie ${esc(n4Line(x.line))} · terminal ${esc(x.term||'—')}</p>${posBox}${sum.map(h=>`<p style="margin:6px 0">${h}</p>`).join('')||'<p class="m-note">Aucun mouvement navire (déchargement ou chargement) enregistré.</p>'}</section>
   <section class="m-box"><b class="tr-h">Historique des mouvements navire</b><table class="tr-t"><thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Mouvement</th></tr></thead><tbody>${ev.map(e=>`<tr><td style="text-align:left;white-space:nowrap">${ctnDate(e.t)}</td><td style="text-align:left"><b>${lab[e.kind]||e.kind}</b> ${esc(vn(e.visit))}${e.crane?' · grue '+esc(e.crane):''}<br><span class="vv">${esc(e.cat||'')} · de ${esc(ctnShort(e.pos_from))} vers ${esc(ctnShort(e.pos_to))}</span></td></tr>`).join('')}</tbody></table></section>`; }
 function renderCtn(){
   if(!canDrv()){ tab='pilot'; render(); return; }
@@ -1434,7 +1436,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.61';
+const APP_V='7.62';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';

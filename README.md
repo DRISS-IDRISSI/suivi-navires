@@ -224,6 +224,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.62 — Position du conteneur mise en évidence
+- Onglet Conteneur : bandeau bleu « POSITION » en gros caractères sous le numéro (dernière position de parc enregistrée, avec la date et le motif : après déchargement ou avant chargement).
+
 ## v7.61 — Positions de parc en langage habituel
 - Onglet Conteneur : la position s'affiche sans le préfixe du TOS (`Y-TCC-BZ083B07` devient `BZ083B07`) ; l'emplacement sur le navire s'écrit baie-rang-niveau (ex. 10-02-82).
 
