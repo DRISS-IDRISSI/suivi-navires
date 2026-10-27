@@ -919,13 +919,22 @@ async function fixJwt(){
   return false;
 }
 const isJwtErr=e=>!!e&&/JWT|token.*expired|expired.*token/i.test(String(e.message||e));
+/* ---- v7.57 : heure des rapports horaires du nouveau format (REP_CRANE_DELAYS_WITH_SQL) ----
+   Les heures WINDOW_START / WINDOW_END de ce fichier sortent d'une base en heure UTC (decalage constate : un rapport de 56 min affichait « il y a 1 h 56 »).
+   Elles sont donc lues comme UTC puis converties en heure de Casablanca a l'affichage. Mettre HSQL_UTC a false si le SI passe un jour ce fichier en heure locale. */
+const HSQL_UTC=true;
+const casaParts=ms=>{ const p=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).formatToParts(new Date(ms)), g=k=>p.find(x=>x.type===k).value; return {y:g('year'),m:g('month'),d:g('day'),h:g('hour'),mi:g('minute')}; };
+function hFix(h){ if(!HSQL_UTC||!h||h.tzu||!h.id||!(h.cranes||[]).some(c=>'visit' in c)) return h;
+  const t=Date.UTC(+h.id.slice(0,4),+h.id.slice(4,6)-1,+h.id.slice(6,8),+h.id.slice(8,10),+h.id.slice(10,12)); if(isNaN(t)) return h;
+  const mm=x=>{ const m=String(x||'').match(/(\d{1,2}):(\d{2})/); return m?+m[1]*60+ +m[2]:null; }, a=mm(h.from), b=mm(h.to), len=a!=null&&b!=null?((b-a+1440)%1440||60):60, q=casaParts(t), f=casaParts(t-len*60000);
+  return {...h,ts:t,id:`${q.y}${q.m}${q.d}${q.h}${q.mi}`,to:`${q.h}:${q.mi}`,from:`${f.h}:${f.mi}`,tzu:1}; }
 async function loadSnaps(retry){
   let {data,error}=await sb.from('snapshots').select('data').order('ts',{ascending:true});
   if(error&&isJwtErr(error)&&!retry){ if(await fixJwt()) return loadSnaps(true); return; }
   if(error){ toast('Lecture impossible : '+error.message); return; }
   /* rapports horaires (8 derniers jours) : si la table n'existe pas encore, l'application fonctionne sans */
   const hr=await sb.from('hourly').select('data').order('ts',{ascending:false}).limit(200);
-  const hd=hr.error?[]:hr.data.map(r=>r.data).reverse();
+  const hd=hr.error?[]:hr.data.map(r=>hFix(r.data)).reverse();
   const rr=await sb.from('rtg_hourly').select('data').order('ts',{ascending:false}).limit(200);
   const rd=rr.error?[]:rr.data.map(r=>r.data).reverse();
   /* mouvements par conducteur (1 ligne par shift) : si la table n'existe pas encore, l'application fonctionne sans */
@@ -1274,7 +1283,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.56';
+const APP_V='7.57';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
@@ -1709,7 +1718,7 @@ function renderDir(){
   const T=[0,1,2].map(i=>tot(allIds,i)), TJ=T.some(x=>x!=null)?T.reduce((a,x)=>a+(x||0),0):null;
   const age=h?(Date.now()-h.ts)/60000:null, cls=n=>n==null?'n':n>=obj?'g':n>=LO()?'w':'c';
   const status=r=>r.op?['g','En opération']:(r.lc&&/CHECK/i.test(r.lc.status))?['w','À vérifier']:r.lm===0?(r.v&&r.v.rem>10?['c',"À l'arrêt"]:['','Inactif']):['','n/d'];
-  const sub=h?`Rapport horaire de ${esc(h.from)}–${esc(h.to)}`+(age!=null?` · il y a ${age<90?Math.round(age)+' min':Math.round(age/60)+' h'}`:''):'Aucun rapport horaire reçu';
+  const sub=h?`Rapport horaire de ${esc(h.from)}–${esc(h.to)}`+(age!=null?` · il y a ${ageTxt(age)}`:''):'Aucun rapport horaire reçu';
   const kp=(v,l)=>`<div><b>${v}</b><span>${l}</span></div>`, nv=x=>x==null?'—':fmt(x);
   const vn=r=>{ const m=manFor(r.id), hc=hcr(r.id), n=m?(m.vessel==='-'?'':m.vessel):(hc?hc.vessel:(r.v?r.v.name:'')), po=m?(m.vessel==='-'?'':m.poste):(hc?(meta[hc.visit]||(sitBy(hc.visit)||{}).poste||''):(r.v?poste(r.v):'')); return (n?esc(n):'—')+(po?` <em class="d-po">${esc(po)}</em>`:'')+(canImp()?` <i class="d-ed">${m?'✎ manuel':'✎'}</i>`:''); };
   const card=r=>{ const [sc,sl]=status(r), mx=Math.max(obj*1.5,...r.hm.map(z=>z||0));
@@ -1720,7 +1729,7 @@ function renderDir(){
   const group=g=>`<h3 class="m-h">${g.t==='TC3'?'TC3 · portiques STS':'TCE · portiques PT'}</h3><div class="d-grid">${g.ids.map(id=>card(R[id])).join('')}</div>
     <div class="d-tot"><div class="m-two">${SC.map((c,i)=>{ const x=tot(g.ids,i); return `<div><b>${nv(x)}</b><span>Total ${c}</span></div>`; }).join('')}</div></div>`;
   app.innerHTML=mTop('Direction · '+(groups.length>1?'TCE + TC3':groups[0].t),sub,false,true)+
-   `<div class="m-body">${segHtml(dsel,'dir')}${age!=null&&age>100?`<div class="d-warn">Dernier rapport horaire reçu il y a ${Math.round(age/60)} h : les chiffres « dernière heure » ne sont plus d'actualité.</div>`:''}${mbxWarn()}
+   `<div class="m-body">${segHtml(dsel,'dir')}${age!=null&&age>100?`<div class="d-warn">Dernier rapport horaire reçu il y a ${ageTxt(age)} : les chiffres « dernière heure » ne sont plus d'actualité.</div>`:''}${mbxWarn()}
     <div class="m-kpi">${kp(nOp,'portiques en opération')}${kp(h?fmt(sumLast):'—','mvts dernière heure')}${kp(h&&nOp?fmt(sumLast/nOp,1):'—','moy. / portique')}</div>
     <div class="m-kpi">${SC.map((c,i)=>kp(nv(T[i]),c+(D.live&&D.live.code===c?' · en cours':''))).join('')}</div>
     <p class="m-note" style="margin:2px 2px 8px">Journée du ${day?dayLab(day):'—'} · ${TJ==null?'—':fmt(TJ)} mouvements (S1 07–15 · S2 15–23 · S3 23–07)</p>

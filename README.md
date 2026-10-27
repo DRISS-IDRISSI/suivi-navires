@@ -224,6 +224,12 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.57 — Heure des rapports horaires (nouveau format)
+- Constat : un rapport horaire de 56 min s'affichait « il y a 1 h 56 ». Les heures WINDOW_START / WINDOW_END du fichier REP_CRANE_DELAYS_WITH_SQL sont en **UTC** (1 h de moins que Casablanca en octobre) ; elles étaient lues comme de l'heure locale.
+- Correction à la lecture (aucune donnée à modifier en base) : ces rapports sont reconvertis en heure de Casablanca (fenêtre, heure d'âge, rapprochement avec les rapports de shift). Les rapports de l'ancien format (REP_QUAY_CRANE_DELAYS) ne sont pas touchés. Interrupteur `HSQL_UTC` dans index.html (mettre `false` si le SI passe le fichier en heure locale).
+- Conséquence : les mouvements des grues sont rattachés à la bonne heure, donc l'estimation « rapport de shift + grues » peut changer légèrement (elle était décalée d'une heure).
+- L'âge s'affiche en heures et minutes (« il y a 1 h 56 ») au lieu d'être arrondi.
+
 ## v7.56 — Contrôle des rapports à l'entrée + bandeau « flux de données »
 - **Fonction `ingest-report` v13** (à coller dans Supabase, voir `CODE_FONCTION_ingest-report_v13_...txt`) : avant d'enregistrer un rapport de shift ou horaire, elle vérifie qu'il est possible. Rejet seulement pour l'impossible : date dans le futur de plus de 3 h, cumulé ou restant négatif, escale en double, cumul qui baisse de plus de 5 % (et 50) par rapport au rapport précédent, plus de 30 % des navires sans cumulé/restant lisible (colonnes décalées), fenêtre horaire absurde, grue à plus de 100 mouvements/heure. Le reste (total à manipuler qui change beaucoup, restant ≠ somme des catégories, rapport ancien…) est enregistré avec un avertissement.
 - Un rapport rejeté n'est pas enregistré : réponse HTTP 200 avec `ok:false, rejected:true` (la boîte mail ne le réessaie pas en boucle) et une ligne est écrite dans la table `ingest_log` (script `SUPABASE_table_ingest_log.sql`, à exécuter avant ou après : sans la table, la fonction continue de travailler). Pour forcer un rapport : l'importer à la main dans l'application (confirmation demandée) ou ajouter `"force": true` au corps de la requête.
