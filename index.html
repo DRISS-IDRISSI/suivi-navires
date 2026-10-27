@@ -828,9 +828,10 @@ function renderTraf(){
   if(!canDrv()){ tab='pilot'; render(); return; }   /* rubrique réservée aux comptes responsables (et administrateurs) */
   const app=$('#app'); document.body.classList.add('mobpilot'); $('#termSeg').hidden=true; $('#btnMob').hidden=true;
   if(!monLoaded){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Chargement…',false,true)+'<div class="m-body"><div class="empty"><b>Chargement…</b></div></div>'; mBind(); loadMonthly().then(()=>render()).catch(()=>{ monLoaded=true; render(); }); return; }
-  const imp=canImp()?`<div class="m-date"><label class="m-up">Importer un rapport (trafic, performance ou bilan mensuel, fichier Excel)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'';
+  const imp=trModeSeg()+(canImp()?`<div class="m-date"><label class="m-up">Importer un rapport (trafic, performance, bilan mensuel ou « MoveEvent » du TOS N4, fichier Excel)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'');
+  if(trMode==='n4'){ renderN4(); return; }
   const T=Object.values(mon).filter(x=>x&&x.kind==='trafic').sort((a,b)=>a.ym<b.ym?1:-1), Pm=Object.values(mon).filter(x=>x&&x.kind==='perf'), Bm=Object.values(mon).filter(x=>x&&x.kind==='bilan').sort((a,b)=>b.year-a.year), BL=Bm[0]?renderBilan(Bm[0]):'';
-  const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; pmSel=null; render(); }; const pm=$('#pmSel'); if(pm) pm.onchange=e=>{ pmSel=e.target.value; render(); }; const re=$('#rotEdit'); if(re) re.onclick=rotModal; const le=$('#lnEdit'); if(le) le.onclick=()=>lineModal(window.__lnP); document.querySelectorAll('[data-lnm]').forEach(b=>{ b.onclick=()=>{ lnMode=b.dataset.lnm; render(); }; }); const sp=$('#shPdf'); if(sp) sp.onclick=()=>{ try{ window.__shPdf(); }catch(e){ toast('PDF impossible : '+e.message); } }; };
+  const bind=()=>{ mBind(); document.querySelectorAll('[data-trm]').forEach(b=>b.onclick=()=>{ trMode=b.dataset.trm; render(); }); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; }; const s=$('#trSel'); if(s) s.onchange=e=>{ trSel=e.target.value; pmSel=null; render(); }; const pm=$('#pmSel'); if(pm) pm.onchange=e=>{ pmSel=e.target.value; render(); }; const re=$('#rotEdit'); if(re) re.onclick=rotModal; const le=$('#lnEdit'); if(le) le.onclick=()=>lineModal(window.__lnP); document.querySelectorAll('[data-lnm]').forEach(b=>{ b.onclick=()=>{ lnMode=b.dataset.lnm; render(); }; }); const sp=$('#shPdf'); if(sp) sp.onclick=()=>{ try{ window.__shPdf(); }catch(e){ toast('PDF impossible : '+e.message); } }; };
   if(!T.length&&!Pm.length&&!BL){ app.innerHTML=mTop('Trafic · comparaison avec 2025','Aucun rapport reçu',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucun rapport de trafic</b>Les rapports « Suivi Trafic Quotidien » et « Rapport Journalier de Performance Opérationnelle » arrivent par e-mail (boîte de l'application) ou s'importent ici.</div></div>`; bind(); return; }
   const years=[...new Set(T.map(x=>x.ym.slice(0,4)))];
   const opts=[...T.map(x=>['M:'+x.ym,trMois(x.ym)]),...years.filter(y=>T.filter(x=>x.ym.slice(0,4)===y).length>1).map(y=>['Y:'+y,'Cumul '+y+' (mois reçus)'])];
@@ -919,10 +920,10 @@ async function fixJwt(){
   return false;
 }
 const isJwtErr=e=>!!e&&/JWT|token.*expired|expired.*token/i.test(String(e.message||e));
-/* ---- v7.57 : heure des rapports horaires du nouveau format (REP_CRANE_DELAYS_WITH_SQL) ----
-   Les heures WINDOW_START / WINDOW_END de ce fichier sortent d'une base en heure UTC (decalage constate : un rapport de 56 min affichait « il y a 1 h 56 »).
-   Elles sont donc lues comme UTC puis converties en heure de Casablanca a l'affichage. Mettre HSQL_UTC a false si le SI passe un jour ce fichier en heure locale. */
-const HSQL_UTC=true;
+/* ---- heure des rapports horaires du nouveau format (REP_CRANE_DELAYS_WITH_SQL) ----
+   v7.57 supposait ces heures en UTC ; la comparaison avec le fichier N4 (v7.58) montre qu'elles sont bien en heure locale (fenetre 10:00-11:00 = mouvements N4 de 10:00 a 11:00).
+   Interrupteur conserve, desactive : mettre HSQL_UTC a true seulement si le SI change un jour le fuseau de ce fichier. */
+const HSQL_UTC=false;
 const casaParts=ms=>{ const p=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).formatToParts(new Date(ms)), g=k=>p.find(x=>x.type===k).value; return {y:g('year'),m:g('month'),d:g('day'),h:g('hour'),mi:g('minute')}; };
 function hFix(h){ if(!HSQL_UTC||!h||h.tzu||!h.id||!(h.cranes||[]).some(c=>'visit' in c)) return h;
   const t=Date.UTC(+h.id.slice(0,4),+h.id.slice(4,6)-1,+h.id.slice(6,8),+h.id.slice(8,10),+h.id.slice(10,12)); if(isNaN(t)) return h;
@@ -933,8 +934,8 @@ async function loadSnaps(retry){
   if(error&&isJwtErr(error)&&!retry){ if(await fixJwt()) return loadSnaps(true); return; }
   if(error){ toast('Lecture impossible : '+error.message); return; }
   /* rapports horaires (8 derniers jours) : si la table n'existe pas encore, l'application fonctionne sans */
-  const hr=await sb.from('hourly').select('data').order('ts',{ascending:false}).limit(200);
-  const hd=hr.error?[]:hr.data.map(r=>hFix(r.data)).reverse();
+  const hr=await sb.from('hourly').select('data,created_at').order('ts',{ascending:false}).limit(200);
+  const hd=hr.error?[]:hr.data.map(r=>{ const h=hFix(r.data), rx=Date.parse(r.created_at); return isNaN(rx)?h:Object.assign({},h,{rx}); }).reverse();
   const rr=await sb.from('rtg_hourly').select('data').order('ts',{ascending:false}).limit(200);
   const rd=rr.error?[]:rr.data.map(r=>r.data).reverse();
   /* mouvements par conducteur (1 ligne par shift) : si la table n'existe pas encore, l'application fonctionne sans */
@@ -1102,10 +1103,10 @@ const vAsk=(name,c)=>!c.e.length||confirm(`${name} : rapport suspect, probableme
 let ING=[];
 const FLOW_T={hour:[90,180],shift:[570,780],sit:[1800,3240]};   /* minutes : alerte, critique */
 const ageTxt=m=>m<90?Math.round(m)+' min':m<2880?Math.floor(m/60)+' h '+String(Math.round(m%60)).padStart(2,'0'):Math.round(m/1440)+' jours';
-const freshMin=()=>{ const t=[lastHour(),lastSnap()].filter(Boolean).map(x=>x.ts); return t.length?(Date.now()-Math.max(...t))/60000:null; };
+const freshMin=()=>{ const t=[lastHour(),lastSnap()].filter(Boolean).map(x=>x.rx||x.ts); return t.length?(Date.now()-Math.max(...t))/60000:null; };
 const dataStale=()=>{ const m=freshMin(); return m!=null&&m>FLOW_T.hour[1]; };
 function flowItems(){ const now=Date.now(), o=[], h=lastHour(), s=lastSnap();
-  const chk=(k,x,label,act)=>{ if(!x) return; const age=(now-(x.ts))/60000, t=FLOW_T[k], lv=age>t[1]?'crit':age>t[0]?'warn':null; if(lv) o.push([lv,label,`Dernier reçu il y a ${ageTxt(age)}. ${act}`]); };
+  const chk=(k,x,label,act)=>{ if(!x) return; const age=(now-(x.rx||x.ts))/60000, t=FLOW_T[k], lv=age>t[1]?'crit':age>t[0]?'warn':null; if(lv) o.push([lv,label,`Dernier reçu il y a ${ageTxt(age)}. ${act}`]); };
   chk('hour',h,'Rapport horaire en retard','Vérifier la tâche Outlook / Power Automate ou appeler le SI. Au-delà de 3 h, les heures de fin estimées sont masquées.');
   chk('shift',s,'Rapport de shift en retard','Attendu toutes les 8 h : vérifier l\'envoi du rapport de fin de shift.');
   chk('sit',sit,'Situation des navires ancienne','Le total prévu par navire (correction du restant) peut ne plus être à jour.');
@@ -1116,9 +1117,115 @@ function flowBannerPut(){ let el=document.getElementById('flowBox'); const on=!!
   const it=on?flowItems():[]; if(!it.length){ if(el) el.remove(); return; }
   if(!el){ el=document.createElement('div'); el.id='flowBox'; el.className='alerts'; el.style.cssText='margin:8px 12px'; $('#app').insertAdjacentElement('beforebegin',el); }
   const pc={crit:'p-crit',warn:'p-warn'}; el.innerHTML=it.map(a=>`<div class="al"><span class="pill ${pc[a[0]]||'p-warn'}">${esc(a[1])}</span><span>${esc(a[2])}</span></div>`).join(''); }
+/* ---- v7.58 : trafic reel depuis le TOS Navis N4 (fichier « MoveEvent ») ----
+   Une ligne du fichier = un mouvement de conteneur de navire (chargement ou dechargement). Les mouvements sont regroupes par
+   shift (S1 07-15, S2 15-23, S3 23-07 ; le S3 appartient au jour ou il commence), terminal, escale, compagnie du conteneur (Line Op) et categorie.
+   EVP : 20' = 1, 40' = 2, 45' = N4_EVP45. Restow (UNIT_SHIFT_ON_CARRIER) et lignes marquees « Exclude » : ignores. */
+const N4_TERM={TC3:'TC3',TCR:'TCE'};   /* code terminal N4 -> terminal de l'application (TCR = TCE) */
+const N4_EVP45=2;
+const N4_LINES={MSC:'MSC',MAE:'MAERSK',ARK:'ARKAS',COSCO:'COSCO',HAPAG:'HAPAG-LLOYD',HMM:'HMM',ONE:'ONE',WECLINE:'WEC LINES',OOCL:'OOCL',EVER:'EVERGREEN',GRIMALD:'GRIMALDI',YANGMIN:'YANG MING',CMACGM:'CMA CGM',ZIMAG:'ZIM'};
+const n4Line=c=>N4_LINES[c]||c;
+const N4_CATS=[['IP','Import plein'],['EP','Export plein'],['IV','Import vide'],['EV','Export vide'],['T','Transit (through)']];
+const N4_SH=[['1','S1 · 07–15'],['2','S2 · 15–23'],['3','S3 · 23–07']];
+const n4Mv=r=>r[6]+r[7]+r[8], n4Evp=r=>r[6]+2*r[7]+N4_EVP45*r[8];
+function isN4Wb(wb){ if(!wb.SheetNames.includes('MOVE')) return false; const ws=wb.Sheets.MOVE; if(!ws) return false; for(let i=1;i<=12;i++){ const c=ws['A'+i]; if(c&&String(c.v).trim()==='Time Completed') return true; } return false; }
+function parseN4(wb){
+  const R=XLSX.utils.sheet_to_json(wb.Sheets.MOVE,{header:1,raw:true,defval:''}), hi=R.findIndex(r=>String(r[0]).trim()==='Time Completed'); if(hi<0) throw new Error('En-tête « Time Completed » introuvable.');
+  const H=R[hi].map(x=>String(x).trim()), col=n=>H.indexOf(n), need=['Time Completed','Move Kind','Unit Category','Unit Frght Kind','Unit Type Length','Carrier TERMINAL','Carrier Visit','Line Op'];
+  const miss=need.filter(n=>col(n)<0); if(miss.length) throw new Error('Colonnes N4 absentes : '+miss.join(', ')+'.');
+  const cT=col('Time Completed'),cK=col('Move Kind'),cC=col('Unit Category'),cF=col('Unit Frght Kind'),cL=col('Unit Type Length'),cTe=col('Carrier TERMINAL'),cV=col('Carrier Visit'),cO=col('Line Op'),cE=col('Event Type'),cX=col('Exclude');
+  const agg=new Map(), p2=x=>String(x).padStart(2,'0'); let mn=Infinity,mx=-Infinity,t0='',t1='',n=0,bad=0,rs=0,ex=0;
+  for(let i=hi+1;i<R.length;i++){ const r=R[i], ts=String(r[cT]||''); if(!ts) continue; const m=ts.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); if(!m){ bad++; continue; }
+    if(cE>=0&&/SHIFT_ON_CARRIER/i.test(String(r[cE]))){ rs++; continue; } if(cX>=0&&/^y/i.test(String(r[cX]).trim())){ ex++; continue; }
+    const ms=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5]); if(ms<mn){ mn=ms; t0=ts.slice(0,16); } if(ms>mx){ mx=ms; t1=ts.slice(0,16); }
+    const d=new Date(ms-7*3600000), day=d.toISOString().slice(0,10), s=Math.floor(d.getUTCHours()/8)+1;
+    const disch=/^disch/i.test(String(r[cK])), emp=/^empty/i.test(String(r[cF])), cat=/^through/i.test(String(r[cC]))?'T':disch?(emp?'IV':'IP'):(emp?'EV':'EP');
+    const tc=String(r[cTe]).trim(), term=N4_TERM[tc]||tc, visit=String(r[cV]).trim().replace(/\.0+$/,''), line=String(r[cO]).trim()||'?', ln=String(r[cL]).trim(), li=/^20/.test(ln)?6:/^45/.test(ln)?8:7;
+    const k=day+'|'+s+'|'+term+'|'+visit+'|'+line+'|'+cat; let a=agg.get(k); if(!a){ a=[day,s,term,visit,line,cat,0,0,0]; agg.set(k,a); } a[li]++; n++; }
+  if(!n) throw new Error('Aucun mouvement lisible dans le fichier N4.');
+  const vis={}; if(wb.SheetNames.includes('ESCALE')){ const E=XLSX.utils.sheet_to_json(wb.Sheets.ESCALE,{header:1,raw:true,defval:''}), eh=E.findIndex(r=>String(r[0]).trim()==='Visit');
+    if(eh>=0) for(let i=eh+1;i<E.length;i++){ const v=String(E[i][0]).trim().replace(/\.0+$/,''); if(v) vis[v]={n:String(E[i][2]).trim(),l:String(E[i][1]).trim()}; } }
+  const by={}; let evp=0; agg.forEach(a=>{ const ym=a[0].slice(0,7); (by[ym]||(by[ym]={rows:[],vis:{}})).rows.push(a); evp+=n4Evp(a); if(vis[a[3]]) by[ym].vis[a[3]]=vis[a[3]]; });
+  return {byMonth:by,fileMin:mn,fileMax:mx,t0,t1,mv:n,evp,bad,rs,ex};
+}
+/* fusion avec ce qui est deja enregistre : un shift complet du nouveau fichier remplace l'ancien ; un shift partiel (debut ou fin du fichier) ne remplace jamais un shift plus complet, et un shift partiel sans ancienne donnee est ecarte (sauf le shift en cours) */
+function n4Merge(old,add){
+  const bk=r=>r[0]+'|'+r[1], sums=rows=>{ const o=new Map(); rows.forEach(r=>o.set(bk(r),(o.get(bk(r))||0)+n4Mv(r))); return o; };
+  const oldRows=(old&&old.rows)||[], so=sums(oldRows), sn=sums(add.rows), keepOld=new Set(), drop=new Set();
+  sn.forEach((c,k)=>{ const [d,s]=k.split('|'), st=Date.parse(d+'T00:00:00Z')+[7,15,23][+s-1]*3600000, en=st+8*3600000, partS=st<add.fileMin, partE=en>add.fileMax+60000;
+    if((partS||partE)&&so.has(k)&&so.get(k)>=c) keepOld.add(k); else if(partS&&!so.has(k)) drop.add(k); });
+  const rows=[...oldRows.filter(r=>keepOld.has(bk(r))||!sn.has(bk(r))),...add.rows.filter(r=>!keepOld.has(bk(r))&&!drop.has(bk(r)))];
+  if(!rows.length) return {doc:null,skipped:drop.size};
+  const days=rows.map(r=>r[0]).sort(), t0=old&&old.t0&&old.t0<add.t0?old.t0:add.t0, t1=old&&old.t1&&old.t1>add.t1?old.t1:add.t1;
+  return {doc:{kind:'n4',id:'n4-'+add.ym,ym:add.ym,rows,vis:Object.assign({},(old&&old.vis)||{},add.vis),first:days[0],last:days[days.length-1],t0,t1,asof:add.asof,src:add.src},skipped:drop.size};
+}
+async function saveN4(p,name){
+  if(!monLoaded) await loadMonthly(); let ok=0, skipped=0;
+  for(const ym of Object.keys(p.byMonth).sort()){ const r=n4Merge(mon['n4-'+ym],Object.assign({},p.byMonth[ym],{ym,asof:todayCasa(),src:name,fileMin:p.fileMin,fileMax:p.fileMax,t0:p.t0,t1:p.t1})); skipped+=r.skipped; if(r.doc&&await saveMonthly(r.doc)) ok++; }
+  trMode='n4'; tab='traf'; toast(`N4 : ${p.mv.toLocaleString('fr-FR')} mouvements, ${Math.round(p.evp).toLocaleString('fr-FR')} EVP (${p.t0.slice(0,10)} → ${p.t1.slice(0,10)}).`+(skipped?` ${skipped} shift partiel(s) de début de fichier écarté(s).`:'')); render(); return ok>0;
+}
+/* ---- v7.58 : ecran « Trafic reel (N4) » ---- */
+let trMode='cmp', n4Per=null, n4From='', n4To='', n4Sh='ALL', n4By='cie';
+const trModeSeg=()=>`<div class="seg m-seg" role="group" aria-label="Affichage">${[['cmp','Comparaison 2025'],['n4','Trafic réel (N4)']].map(([k,l])=>`<button type="button" data-trm="${k}" aria-pressed="${k===trMode}">${l}</button>`).join('')}</div>`;
+const ymdAdd=(d,n)=>new Date(Date.parse(d+'T00:00:00Z')+n*864e5).toISOString().slice(0,10);
+function n4Agg(rows,kf){ const m=new Map(); rows.forEach(r=>{ const k=kf(r); let o=m.get(k); if(!o){ o={k,mv:0,evp:0,c:{}}; m.set(k,o); } const e=n4Evp(r); o.mv+=n4Mv(r); o.evp+=e; o.c[r[5]]=(o.c[r[5]]||0)+e; }); return [...m.values()]; }
+function n4Bars(days,term){ const n=days.length; if(n<2) return ''; const W=340,H=96,bw=Math.max(2,Math.min(22,(W-8)/n-2)), mx=Math.max(1,...days.map(d=>d.t)), x=i=>4+i*((W-8)/n);
+  const bars=days.map((d,i)=>{ const h3=d.TC3/mx*(H-18), hE=d.TCE/mx*(H-18); return `<g><title>${trDay(d.d)} : ${trF(d.t)} EVP</title><rect x="${x(i)}" y="${H-14-h3}" width="${bw}" height="${h3}" fill="#2f6fb0"/><rect x="${x(i)}" y="${H-14-h3-hE}" width="${bw}" height="${hE}" fill="#e08a1e"/></g>`; }).join('');
+  const lab=[0,Math.floor(n/2),n-1].map(i=>`<text x="${x(i)+bw/2}" y="${H-2}" font-size="9" text-anchor="middle" fill="#5b6f8f">${trDay(days[i].d)}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="EVP par jour">${bars}${lab}</svg>${term==='ALL'?'<p class="m-note" style="margin:2px 0 0"><span style="color:#2f6fb0">■</span> TC3 &nbsp;<span style="color:#e08a1e">■</span> TCE</p>':''}`; }
+function renderN4(){
+  const app=$('#app'), docs=Object.values(mon).filter(x=>x&&x.kind==='n4').sort((a,b)=>a.ym<b.ym?-1:1);
+  const imp=trModeSeg()+(canImp()?`<div class="m-date"><label class="m-up">Importer un fichier Excel (trafic, performance, bilan, ou « MoveEvent » du TOS N4)<input type="file" id="monFile" accept=".xls,.xlsx" multiple hidden></label></div>`:'');
+  const bind=()=>{ mBind(); const f=$('#monFile'); if(f) f.onchange=e=>{ importFiles([...e.target.files]); e.target.value=''; };
+    document.querySelectorAll('[data-trm]').forEach(b=>b.onclick=()=>{ trMode=b.dataset.trm; render(); });
+    const bs=(id,fn)=>{ const el=document.getElementById(id); if(el) el.onchange=e=>{ fn(e.target.value); render(); }; };
+    bs('n4Per',v=>{ n4Per=v; }); bs('n4Sh',v=>{ n4Sh=v; }); bs('n4F',v=>{ n4From=v; }); bs('n4T',v=>{ n4To=v; });
+    document.querySelectorAll('[data-n4by]').forEach(b=>b.onclick=()=>{ n4By=b.dataset.n4by; render(); });
+    const x=document.getElementById('n4X'); if(x) x.onclick=()=>n4Export(); };
+  if(!docs.length){ app.innerHTML=mTop('Trafic réel · TOS N4','Aucun fichier importé',false,true)+`<div class="m-body">${imp}<div class="empty"><b>Aucun fichier N4</b>Exportez le rapport « MoveEvent » depuis Navis N4 (feuilles MOVE et ESCALE), puis importez-le avec le bouton ci-dessus. Il donne le trafic réel en mouvements et en EVP, par terminal, compagnie, navire et période.</div></div>`; bind(); return; }
+  const allDays=[...new Set(docs.flatMap(d=>d.rows.map(r=>r[0])))].sort(), first=allDays[0], last=allDays[allDays.length-1], yms=docs.map(d=>d.ym);
+  const opts=[['L1','Dernier jour ('+trDay(last)+')'],['L7','7 derniers jours'],...yms.slice().reverse().map(y=>['M:'+y,trMois(y)]),['R','Période libre']];
+  if(!n4Per||!opts.some(o=>o[0]===n4Per)) n4Per=yms.length?'M:'+yms[yms.length-1]:'L7';
+  let a,b; if(n4Per==='L1'){ a=b=last; } else if(n4Per==='L7'){ a=ymdAdd(last,-6); b=last; } else if(n4Per[0]==='M'){ const y=n4Per.slice(2); a=y+'-01'; b=y+'-31'; } else { a=n4From||first; b=n4To||last; } if(a>b){ const t=a; a=b; b=t; }
+  const tt=trTerm(), sh=n4Sh, lab=tt==='ALL'?'TCE + TC3':tt;
+  const rows=docs.flatMap(d=>d.rows).filter(r=>r[0]>=a&&r[0]<=b&&(tt==='ALL'||r[2]===tt)&&(sh==='ALL'||String(r[1])===sh));
+  const vis=Object.assign({},...docs.map(d=>d.vis||{})), vname=v=>(vis[v]&&vis[v].n)||('Escale '+v);
+  const tot=n4Agg(rows,()=>'x')[0]||{mv:0,evp:0,c:{}}, cats=N4_CATS.map(([k,l])=>({k,l,evp:tot.c[k]||0,mv:rows.filter(r=>r[5]===k).reduce((s,r)=>s+n4Mv(r),0)}));
+  const days=[...new Set(rows.map(r=>r[0]))].sort().map(d=>{ const o={d,TC3:0,TCE:0,mv:0}; rows.filter(r=>r[0]===d).forEach(r=>{ const e=n4Evp(r); o[r[2]]=(o[r[2]]||0)+e; o.mv+=n4Mv(r); }); o.t=(o.TC3||0)+(o.TCE||0); return o; });
+  const byT=n4Agg(rows,r=>r[2]).sort((x,y)=>y.evp-x.evp), byS=n4Agg(rows,r=>String(r[1])).sort((x,y)=>x.k<y.k?-1:1);
+  const cie=n4Agg(rows,r=>r[4]).sort((x,y)=>y.evp-x.evp), ves=n4Agg(rows,r=>r[3]+'|'+r[2]).sort((x,y)=>y.evp-x.evp);
+  const pc=(x,t)=>t?(100*x/t).toFixed(1).replace('.',',')+' %':'—', nj=days.length;
+  const covWarn=n4Per==='R'&&(a<first||b>last)?`<p class="m-note m-w">Données N4 disponibles du ${trDay(first)} au ${trDay(last)} seulement.</p>`:'';
+  let body=imp+segHtml(tt,'traf');
+  body+=`<div class="m-date"><select id="n4Per" aria-label="Période">${opts.map(o=>`<option value="${o[0]}" ${o[0]===n4Per?'selected':''}>${esc(o[1])}</option>`).join('')}</select></div>`;
+  if(n4Per==='R') body+=`<div class="m-date" style="display:flex;gap:6px"><input type="date" id="n4F" value="${a}" min="${first}" max="${last}" aria-label="Du"><input type="date" id="n4T" value="${b}" min="${first}" max="${last}" aria-label="Au"></div>`;
+  body+=`<div class="m-date"><select id="n4Sh" aria-label="Shift"><option value="ALL" ${sh==='ALL'?'selected':''}>Tous les shifts</option>${N4_SH.map(([k,l])=>`<option value="${k}" ${sh===k?'selected':''}>${l}</option>`).join('')}</select></div>`+covWarn;
+  body+=`<div class="tr-hero"><span>EVP réels ${lab}${sh==='ALL'?'':' · '+N4_SH.find(x=>x[0]===sh)[1]}</span><b>${trF(tot.evp)}</b><div>${trF(tot.mv)} mouvements · ${nj} jour${nj>1?'s':''} · ${tot.mv?(tot.evp/tot.mv).toFixed(2).replace('.',','):'—'} EVP par mouvement</div></div>`;
+  body+=`<div class="tr-kpi">${cats.filter(c=>c.mv).map(c=>`<div class="tr-k"><span>${c.l}</span><b>${trF(c.evp)}</b><small>${trF(c.mv)} mouvements</small><em>${pc(c.evp,tot.evp)}</em></div>`).join('')}</div>`;
+  if(days.length>1) body+=`<section class="m-box"><b class="tr-h">EVP par jour (${lab})</b>${n4Bars(days,tt)}</section>`;
+  if(tt==='ALL'&&byT.length>1) body+=`<section class="m-box"><b class="tr-h">Par terminal</b><table class="tr-t"><thead><tr><th style="text-align:left">Terminal</th><th>Mvts</th><th>EVP</th><th>Part</th></tr></thead><tbody>${byT.map(o=>`<tr><td style="text-align:left"><b>${esc(o.k)}</b></td><td>${trF(o.mv)}</td><td>${trF(o.evp)}</td><td>${pc(o.evp,tot.evp)}</td></tr>`).join('')}</tbody></table></section>`;
+  if(sh==='ALL'&&byS.length>1) body+=`<section class="m-box"><b class="tr-h">Par shift</b><table class="tr-t"><thead><tr><th style="text-align:left">Shift</th><th>Mvts</th><th>EVP</th><th>Part</th></tr></thead><tbody>${byS.map(o=>`<tr><td style="text-align:left">${(N4_SH.find(x=>x[0]===o.k)||[0,'S'+o.k])[1]}</td><td>${trF(o.mv)}</td><td>${trF(o.evp)}</td><td>${pc(o.evp,tot.evp)}</td></tr>`).join('')}</tbody></table></section>`;
+  const seg=`<div class="seg m-seg" role="group" aria-label="Regroupement">${[['cie','Par compagnie'],['nav','Par navire']].map(([k,l])=>`<button type="button" data-n4by="${k}" aria-pressed="${k===n4By}">${l}</button>`).join('')}</div>`;
+  if(n4By==='cie') body+=`<h3 class="m-h">Trafic par compagnie maritime · ${lab}</h3>${seg}<section class="m-box"><b class="tr-h">Compagnie du conteneur (« Line Op » du TOS), classées par EVP</b><table class="tr-t"><thead><tr><th style="text-align:left">Compagnie</th><th>Mvts</th><th>EVP</th><th>Part</th></tr></thead><tbody>${cie.map(o=>`<tr><td style="text-align:left"><b>${esc(n4Line(o.k))}</b>${N4_LINES[o.k]?'':` <span class="vv">(code N4)</span>`}</td><td>${trF(o.mv)}</td><td>${trF(o.evp)}</td><td>${pc(o.evp,tot.evp)}</td></tr>`).join('')||'<tr><td colspan="4">Aucun mouvement.</td></tr>'}</tbody></table></section>`;
+  else body+=`<h3 class="m-h">Trafic par navire · ${lab}</h3>${seg}<section class="m-box"><b class="tr-h">Escales classées par EVP</b><table class="tr-t"><thead><tr><th style="text-align:left">Navire</th><th>Term.</th><th>Mvts</th><th>EVP</th></tr></thead><tbody>${ves.slice(0,40).map(o=>{ const [v,t]=o.k.split('|'); return `<tr><td style="text-align:left">${esc(vname(v))}<br><span class="vv">${esc(v)}</span></td><td>${esc(t)}</td><td>${trF(o.mv)}</td><td>${trF(o.evp)}</td></tr>`; }).join('')||'<tr><td colspan="4">Aucun mouvement.</td></tr>'}</tbody></table>${ves.length>40?`<p class="m-note">${ves.length-40} autre(s) escale(s) dans l'export Excel.</p>`:''}</section>`;
+  if(days.length) body+=`<section class="m-box"><b class="tr-h">Jour par jour (${lab})</b><table class="tr-t"><thead><tr><th style="text-align:left">Jour</th>${tt==='ALL'?'<th>TC3</th><th>TCE</th>':''}<th>Mvts</th><th>EVP</th></tr></thead><tbody>${days.map(d=>`<tr><td style="text-align:left">${trDay(d.d)}</td>${tt==='ALL'?`<td>${trF(d.TC3)}</td><td>${trF(d.TCE)}</td>`:''}<td>${trF(d.mv)}</td><td><b>${trF(d.t)}</b></td></tr>`).join('')}</tbody></table></section>`;
+  const dd=docs[docs.length-1], t0=docs[0].t0||first, t1=dd.t1||last;
+  body+=`<p class="m-note">Source : TOS Navis N4, mouvements de navire (déchargement + chargement, y compris vides), restow exclu. Données du ${esc(String(t0).slice(0,16))} au ${esc(String(t1).slice(0,16))}, importées le ${esc(dd.asof||'')}. Le jour est celui du début du shift (le S3 de 23 h à 7 h appartient au jour où il commence). EVP : 20' = 1, 40' = 2, 45' = ${N4_EVP45}. Le terminal N4 « TCR » est affiché TCE. Le dernier shift peut être incomplet.</p><div class="m-date"><button type="button" class="m-go" id="n4X">Exporter cette vue en Excel</button></div>`;
+  window.__n4X={lab,a,b,sh,tot,cats,byT,byS,cie,ves,days,vname};
+  app.innerHTML=mTop('Trafic réel · TOS N4',`${trDay(a)} → ${trDay(b)} · ${lab}`,false,true)+`<div class="m-body">${body}</div>`; bind();
+}
+function n4Export(){ const X=window.__n4X; if(!X) return; const wb=XLSX.utils.book_new(), N=x=>Math.round(x);
+  const add=(nm,aoa)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),nm);
+  add('Synthèse',[['Trafic réel TOS N4',X.lab],['Période',X.a+' → '+X.b],['Shift',X.sh==='ALL'?'Tous':X.sh],[],['Indicateur','Mouvements','EVP'],['Total',X.tot.mv,N(X.tot.evp)],...X.cats.filter(c=>c.mv).map(c=>[c.l,c.mv,N(c.evp)])]);
+  add('Par compagnie',[['Compagnie (Line Op)','Code N4','Mouvements','EVP','Part %'],...X.cie.map(o=>[n4Line(o.k),o.k,o.mv,N(o.evp),X.tot.evp?+(100*o.evp/X.tot.evp).toFixed(2):0])]);
+  add('Par navire',[['Navire','Escale','Terminal','Mouvements','EVP'],...X.ves.map(o=>{ const [v,t]=o.k.split('|'); return [X.vname(v),v,t,o.mv,N(o.evp)]; })]);
+  add('Par jour',[['Jour','TC3 EVP','TCE EVP','Mouvements','EVP'],...X.days.map(d=>[d.d,N(d.TC3||0),N(d.TCE||0),d.mv,N(d.t)])]);
+  add('Par shift',[['Shift','Mouvements','EVP'],...X.byS.map(o=>[(N4_SH.find(x=>x[0]===o.k)||[0,'S'+o.k])[1],o.mv,N(o.evp)])]);
+  XLSX.writeFile(wb,`Trafic_N4_${X.a}_${X.b}.xlsx`); }
 async function importFiles(files){
   let ok=0; for(const f of files){
-    try{ const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
+    try{ if(f.size>1500000){ toast('Lecture du fichier volumineux, patientez quelques secondes…'); await new Promise(r=>setTimeout(r,60)); } const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
+      if(isN4Wb(wb)){ if(await saveN4(parseN4(wb),f.name)) ok++; continue; }
       if(isBilanWb(wb)){ if(await saveMonthly(parseBilan(wb,n=>gridRows(wb.Sheets[n])))) ok++; }
       else if(isPerfWb(wb)){ if(await saveMonthly(parsePerf(wb,n=>gridRows(wb.Sheets[n])))) ok++; }
       else if(isTraficRows(gridRows(wb.Sheets[wb.SheetNames[0]]))){ if(await saveMonthly(parseTrafic(gridRows(wb.Sheets[wb.SheetNames[0]])))) ok++; }
@@ -1283,7 +1390,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.57';
+const APP_V='7.58';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
@@ -1716,9 +1823,9 @@ function renderDir(){
   const nOp=rows.length, sumLast=rows.reduce((a,r)=>a+(r.lm||0),0);
   const tot=(ids,i)=>{ let a=null; ids.forEach(id=>{ const x=R[id].sh[i]; if(x) a=(a||0)+x.v; }); return a; };
   const T=[0,1,2].map(i=>tot(allIds,i)), TJ=T.some(x=>x!=null)?T.reduce((a,x)=>a+(x||0),0):null;
-  const age=h?(Date.now()-h.ts)/60000:null, cls=n=>n==null?'n':n>=obj?'g':n>=LO()?'w':'c';
+  const age=h?(Date.now()-(h.rx||h.ts))/60000:null, cls=n=>n==null?'n':n>=obj?'g':n>=LO()?'w':'c';
   const status=r=>r.op?['g','En opération']:(r.lc&&/CHECK/i.test(r.lc.status))?['w','À vérifier']:r.lm===0?(r.v&&r.v.rem>10?['c',"À l'arrêt"]:['','Inactif']):['','n/d'];
-  const sub=h?`Rapport horaire de ${esc(h.from)}–${esc(h.to)}`+(age!=null?` · il y a ${ageTxt(age)}`:''):'Aucun rapport horaire reçu';
+  const sub=h?`Rapport horaire de ${esc(h.from)}–${esc(h.to)}`+(age!=null?` · reçu il y a ${ageTxt(age)}`:''):'Aucun rapport horaire reçu';
   const kp=(v,l)=>`<div><b>${v}</b><span>${l}</span></div>`, nv=x=>x==null?'—':fmt(x);
   const vn=r=>{ const m=manFor(r.id), hc=hcr(r.id), n=m?(m.vessel==='-'?'':m.vessel):(hc?hc.vessel:(r.v?r.v.name:'')), po=m?(m.vessel==='-'?'':m.poste):(hc?(meta[hc.visit]||(sitBy(hc.visit)||{}).poste||''):(r.v?poste(r.v):'')); return (n?esc(n):'—')+(po?` <em class="d-po">${esc(po)}</em>`:'')+(canImp()?` <i class="d-ed">${m?'✎ manuel':'✎'}</i>`:''); };
   const card=r=>{ const [sc,sl]=status(r), mx=Math.max(obj*1.5,...r.hm.map(z=>z||0));

@@ -224,7 +224,15 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
-## v7.57 — Heure des rapports horaires (nouveau format)
+## v7.58 — Trafic réel depuis le TOS Navis N4 + correction de l'âge des rapports horaires
+- **Nouveau : Trafic → « Trafic réel (N4) »** (comptes responsable/administrateur). Import du fichier Excel « MoveEvent » (feuilles MOVE et ESCALE) avec le bouton d'import de l'onglet Trafic. Chaque ligne = un mouvement de conteneur de navire ; le fichier est agrégé (≈ 46 Ko par mois) et enregistré dans la table `monthly` (id `n4-AAAA-MM`).
+- Vues : période (dernier jour, 7 derniers jours, mois, période libre), terminal (TCE / TC3 / les deux), shift (S1 07–15, S2 15–23, S3 23–07), EVP réels et mouvements, répartition import plein / export plein / import vide / export vide / transit, par terminal, par shift, **par compagnie maritime** (compagnie du conteneur, « Line Op »), par navire, jour par jour avec graphique, export Excel de la vue.
+- Règles : EVP 20' = 1, 40' = 2, 45' = 2 (constante `N4_EVP45`) ; restow (UNIT_SHIFT_ON_CARRIER) et lignes « Exclude » ignorés ; le jour est celui du début du shift (le S3 appartient au jour où il commence) ; terminal N4 « TCR » = TCE (`N4_TERM`). Codes de compagnie → noms dans `N4_LINES` (les codes inconnus sont affichés tels quels).
+- Réimport : un shift complet du nouveau fichier remplace l'ancien ; un shift partiel ne remplace jamais un shift plus complet ; un shift partiel de début de fichier sans donnée antérieure est écarté (ex. le S3 du 30/09 si le fichier commence le 1er à 00:01).
+- Vérifié : les mouvements par grue et par navire du fichier N4 sont identiques à ceux du rapport de shift du 04/10 (07:00–15:00) et du rapport horaire du 13/10 (10:00–11:00).
+- **Correction** : l'hypothèse UTC de la v7.57 était fausse (les heures du rapport horaire sont bien locales, vérifié avec N4). `HSQL_UTC` repasse à `false`. L'âge du rapport horaire est maintenant mesuré depuis sa **réception** (colonne `created_at` de la table `hourly`), plus depuis la fin de sa fenêtre ; l'écran Direction affiche « reçu il y a … ».
+
+## v7.57 — (ANNULÉ en v7.58) Heure des rapports horaires
 - Constat : un rapport horaire de 56 min s'affichait « il y a 1 h 56 ». Les heures WINDOW_START / WINDOW_END du fichier REP_CRANE_DELAYS_WITH_SQL sont en **UTC** (1 h de moins que Casablanca en octobre) ; elles étaient lues comme de l'heure locale.
 - Correction à la lecture (aucune donnée à modifier en base) : ces rapports sont reconvertis en heure de Casablanca (fenêtre, heure d'âge, rapprochement avec les rapports de shift). Les rapports de l'ancien format (REP_QUAY_CRANE_DELAYS) ne sont pas touchés. Interrupteur `HSQL_UTC` dans index.html (mettre `false` si le SI passe le fichier en heure locale).
 - Conséquence : les mouvements des grues sont rattachés à la bonne heure, donc l'estimation « rapport de shift + grues » peut changer légèrement (elle était décalée d'une heure).
