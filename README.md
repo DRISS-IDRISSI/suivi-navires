@@ -224,6 +224,14 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.63 — Fichier N4 à plusieurs onglets (15 jours) + transbordement
+- Un fichier N4 « MoveEvent » peut contenir plusieurs onglets de mouvements (par ex. 4 × 15 jours) : tous sont lus, les doublons entre onglets sont ignorés.
+- L'onglet des escales (dernier onglet, « VesselVisitDetails… » ou « ESCALE ») est reconnu automatiquement et sert à afficher les noms de navires.
+- Fusion par couverture : on peut importer les fichiers dans n'importe quel ordre ; une vacation S3 à cheval sur deux fichiers (ex. 30/09 23:00 → 01/10 07:00) est additionnée correctement.
+- Nouvelle catégorie « Transbordement / transit » (Through + Transship), distincte des import / export.
+- Sélecteur de période « Tous les mois importés » + tableau « Mois par mois ».
+- Import long : environ 100 000 lignes envoyées à n4_moves (par lots de 1000) ; patienter jusqu'au message de fin.
+
 ## v7.62 — Position du conteneur mise en évidence
 - Onglet Conteneur : bandeau bleu « POSITION » en gros caractères sous le numéro (dernière position de parc enregistrée, avec la date et le motif : après déchargement ou avant chargement).
 
