@@ -224,6 +224,16 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.72 — Table code → armateur mise à jour
+- IMAGESA = HMM, XPF = X-PRESS FEEDERS (nouvelle version de la table, 120 codes).
+
+## v7.71 — Table code → armateur
+- La table de correspondance fournie (118 codes) est intégrée : « Par compagnie » regroupe maintenant par armateur (ex. MAE + MAEU + MSK = MAERSK ; ARK + ARKAS + AKS + COM = ARKAS ; GLOBCA + USS + HFXU = MCI). S'applique aussi aux données déjà importées, sans réimport. L'export Excel suit.
+- Codes absents de la table : affichés tels quels avec « (code) ».
+
+## v7.70 — Ligne « ? » (avant Navis)
+- Les mouvements du pointage sans code compagnie (surtout des exports sur les feeders DIANE A, MARIO A, WANDA A, HILDE A…) sont rattachés à la compagnie dominante de la même escale et du même sens (ARKAS). S'il n'y en a pas : « Non renseignée ».
+
 ## v7.68–7.69 — Fichier N4 de juillet (heure « 26-juil.-31 2356 ») + classement des escales
 - L'heure N4 peut maintenant être au format « aa-mois-jj hhmm » (mois en français ou anglais) en plus du format ISO : avant, le fichier était refusé (« Aucun mouvement lisible »).
 - Mouvements « Yard Move » et « Receival » ignorés (ce ne sont pas des mouvements navire) ; « Shift O.B. » traité comme un restow.
