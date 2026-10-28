@@ -224,6 +224,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.67 — Par navire : colonne Terminal supprimée
+- Le terminal reste indiqué dans le nom (navire sur un seul terminal) ou dans les sous-lignes TC3 / TCE (navire sur les deux).
+
 ## v7.66 — Par navire : une seule ligne par navire, avec terminal et escales
 - Un navire (même nom) n'apparaît plus qu'une fois, même s'il a travaillé sur TC3 et TCE : ligne de total (mouvements, EVP, nombre d'escales), puis une ligne par terminal avec ses escales. L'export Excel suit (ligne « TOTAL » + une ligne par terminal).
 
