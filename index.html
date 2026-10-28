@@ -1178,14 +1178,14 @@ function parseLegacy(wb){
   const iso=v=>{ if(typeof v==='number'&&v>20000){ return new Date(Math.round((v-25569)*864e5)).toISOString().slice(0,19).replace('T',' '); } return String(v||'').trim(); };
   for(const sn of sh){
     const R=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:''}), hi=R.findIndex(r=>String(r[0]).trim()==='DATE_HEURE_POINTAGE'); if(hi<0) continue;
-    const H=R[hi].map(x=>String(x).trim()), col=k=>H.indexOf(k), need=['TERMINAL','VAR','NAME','SENS_TRAFIC','DIMENSION','VISIT','NUMERO'], miss=need.filter(k=>col(k)<0); if(miss.length) throw new Error('Colonnes absentes dans « '+sn+' » : '+miss.join(', ')+'.');
-    const cT=0,cTe=col('TERMINAL'),cVa=col('VAR'),cN=col('NAME'),cS=col('SENS_TRAFIC'),cD=col('DIMENSION'),cV=col('VISIT'),cU=col('NUMERO'),cCo=col('CODE_CONSIG')>=0?col('CODE_CONSIG'):col('CODE');
+    const H=R[hi].map(x=>String(x).trim()), col=k=>H.indexOf(k), need=['TERMINAL','VAR','SENS_TRAFIC','DIMENSION','VISIT','NUMERO'], miss=need.filter(k=>col(k)<0); if(miss.length) throw new Error('Colonnes absentes dans « '+sn+' » : '+miss.join(', ')+'.');
+    const cT=0,cTe=col('TERMINAL'),cVa=col('VAR'),cN=['NAME','NAVIRE','NOM_NAVIRE','VESSEL','VESSEL_NAME'].map(col).find(i=>i>=0)??-1,cS=col('SENS_TRAFIC'),cD=col('DIMENSION'),cV=col('VISIT'),cU=col('NUMERO'),cCo=col('CODE_CONSIG')>=0?col('CODE_CONSIG'):col('CODE');
     const dom={}; for(let i=hi+1;i<R.length;i++){ const r=R[i], c0=String(r[cCo]).trim(); if(!c0) continue; const k=String(r[cV]).trim()+'|'+(/^imp/i.test(String(r[cS]))?'I':'E'), o=dom[k]||(dom[k]={}); o[c0]=(o[c0]||0)+1; }
     const domOf=(v,imp)=>{ const o=dom[v+'|'+(imp?'I':'E')]; return o?Object.keys(o).sort((x,y)=>o[y]-o[x])[0]:''; };
     for(let i=hi+1;i<R.length;i++){ const r=R[i], ts=iso(r[cT]); if(!ts||/^this is/i.test(ts)) continue; const m=ts.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); if(!m||!String(r[cU]).trim()){ bad++; continue; }
       const unit=String(r[cU]).trim().toUpperCase(), imp=/^imp/i.test(String(r[cS])), emp=/^vide/i.test(String(r[cVa])), term=String(r[cTe]).trim()||'?', visit=String(r[cV]).trim().replace(/\.0+$/,''), lraw=String(r[cCo]).trim(), lr2=lraw||domOf(visit,imp), line=LEG_LINE[lr2]||lr2||'?', dm=String(r[cD]).trim(), li=/^20/.test(dm)?6:/^45/.test(dm)?8:7;
       const dk=unit+'|'+ts+'|'+(imp?'I':'E')+'|'+term; if(seen.has(dk)){ dup++; continue; } seen.add(dk);
-      if(visit&&String(r[cN]).trim()) vis[visit]={n:String(r[cN]).trim(),l:''};
+      if(visit&&cN>=0&&String(r[cN]).trim()) vis[visit]={n:String(r[cN]).trim(),l:''};
       units.push({unit,t:ts.slice(0,16),kind:imp?'D':'L',cat:imp?'Import':'Export',frt:emp?'E':'F',len:li===6?'20':li===8?'45':'40',term,visit,crane:'',pos_from:'',pos_to:'',line});
       const ms=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5]); if(ms<mn){ mn=ms; t0=ts.slice(0,16); } if(ms>mx){ mx=ms; t1=ts.slice(0,16); }
       const d=new Date(ms-7*3600000), day=d.toISOString().slice(0,10), sf=Math.floor(d.getUTCHours()/8)+1, cat=imp?(emp?'IV':'IP'):(emp?'EV':'EP');
@@ -1497,7 +1497,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.72';
+const APP_V='7.73';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
