@@ -224,6 +224,12 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.68–7.69 — Fichier N4 de juillet (heure « 26-juil.-31 2356 ») + classement des escales
+- L'heure N4 peut maintenant être au format « aa-mois-jj hhmm » (mois en français ou anglais) en plus du format ISO : avant, le fichier était refusé (« Aucun mouvement lisible »).
+- Mouvements « Yard Move » et « Receival » ignorés (ce ne sont pas des mouvements navire) ; « Shift O.B. » traité comme un restow.
+- Mouvements sans terminal de navire (« Carrier TERMINAL » vide) : rattachés au terminal de leur escale, sinon à la grue (STS = TC3, PT/RORO = TCE), sinon au terminal du conteneur. Le nombre est affiché à l'import.
+- Par navire : les escales de chaque terminal sont classées par EVP décroissant, avec l'EVP de chaque escale.
+
 ## v7.67 — Par navire : colonne Terminal supprimée
 - Le terminal reste indiqué dans le nom (navire sur un seul terminal) ou dans les sous-lignes TC3 / TCE (navire sur les deux).
 
