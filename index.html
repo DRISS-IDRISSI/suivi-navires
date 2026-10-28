@@ -1157,6 +1157,31 @@ function parseN4(wb){
   Object.keys(cov).forEach(k=>{ const ym=k.slice(0,7); if(by[ym]) by[ym].cov[k]=cov[k]; });
   return {byMonth:by,fileMin:mn,fileMax:mx,t0,t1,mv:n,evp,bad,rs,ex,dup,units,sheets:moveSh.length};
 }
+/* ---- v7.65 : mouvements AVANT le demarrage de Navis (ancien systeme de pointage : feuilles Import et Export) ---- */
+const LEG_LINE={MSCMAR:'MSC',ARKAS:'ARK',COSMO:'COSCO',EVERGRE:'EVER'};
+const legHead=ws=>{ if(!ws) return -1; for(let i=1;i<=8;i++){ const c=ws['A'+i]; if(c&&String(c.v).trim()==='DATE_HEURE_POINTAGE') return i-1; } return -1; };
+function isLegWb(wb){ return wb.SheetNames.some(n=>legHead(wb.Sheets[n])>=0); }
+function parseLegacy(wb){
+  const sh=wb.SheetNames.filter(n=>legHead(wb.Sheets[n])>=0), agg=new Map(), cov={}, seen=new Set(), units=[]; let mn=Infinity,mx=-Infinity,t0='',t1='',n=0,bad=0,dup=0; const vis={};
+  const iso=v=>{ if(typeof v==='number'&&v>20000){ return new Date(Math.round((v-25569)*864e5)).toISOString().slice(0,19).replace('T',' '); } return String(v||'').trim(); };
+  for(const sn of sh){
+    const R=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:''}), hi=R.findIndex(r=>String(r[0]).trim()==='DATE_HEURE_POINTAGE'); if(hi<0) continue;
+    const H=R[hi].map(x=>String(x).trim()), col=k=>H.indexOf(k), need=['TERMINAL','VAR','NAME','SENS_TRAFIC','DIMENSION','VISIT','NUMERO'], miss=need.filter(k=>col(k)<0); if(miss.length) throw new Error('Colonnes absentes dans « '+sn+' » : '+miss.join(', ')+'.');
+    const cT=0,cTe=col('TERMINAL'),cVa=col('VAR'),cN=col('NAME'),cS=col('SENS_TRAFIC'),cD=col('DIMENSION'),cV=col('VISIT'),cU=col('NUMERO'),cCo=col('CODE_CONSIG')>=0?col('CODE_CONSIG'):col('CODE');
+    for(let i=hi+1;i<R.length;i++){ const r=R[i], ts=iso(r[cT]); if(!ts||/^this is/i.test(ts)) continue; const m=ts.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); if(!m||!String(r[cU]).trim()){ bad++; continue; }
+      const unit=String(r[cU]).trim().toUpperCase(), imp=/^imp/i.test(String(r[cS])), emp=/^vide/i.test(String(r[cVa])), term=String(r[cTe]).trim()||'?', visit=String(r[cV]).trim().replace(/\.0+$/,''), lraw=String(r[cCo]).trim(), line=LEG_LINE[lraw]||lraw||'?', dm=String(r[cD]).trim(), li=/^20/.test(dm)?6:/^45/.test(dm)?8:7;
+      const dk=unit+'|'+ts+'|'+(imp?'I':'E')+'|'+term; if(seen.has(dk)){ dup++; continue; } seen.add(dk);
+      if(visit&&String(r[cN]).trim()) vis[visit]={n:String(r[cN]).trim(),l:''};
+      units.push({unit,t:ts.slice(0,16),kind:imp?'D':'L',cat:imp?'Import':'Export',frt:emp?'E':'F',len:li===6?'20':li===8?'45':'40',term,visit,crane:'',pos_from:'',pos_to:'',line});
+      const ms=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5]); if(ms<mn){ mn=ms; t0=ts.slice(0,16); } if(ms>mx){ mx=ms; t1=ts.slice(0,16); }
+      const d=new Date(ms-7*3600000), day=d.toISOString().slice(0,10), sf=Math.floor(d.getUTCHours()/8)+1, cat=imp?(emp?'IV':'IP'):(emp?'EV':'EP');
+      const k=day+'|'+sf+'|'+term+'|'+visit+'|'+line+'|'+cat; let a=agg.get(k); if(!a){ a=[day,sf,term,visit,line,cat,0,0,0]; agg.set(k,a); } a[li]++; n++;
+      const bk=day+'|'+sf, mi=Math.floor(ms/60000), c0=cov[bk]; if(!c0) cov[bk]=[mi,mi]; else { if(mi<c0[0]) c0[0]=mi; if(mi>c0[1]) c0[1]=mi; } } }
+  if(!n) throw new Error('Aucun mouvement lisible dans le fichier.');
+  const by={}; let evp=0; agg.forEach(a=>{ const ym=a[0].slice(0,7); (by[ym]||(by[ym]={rows:[],vis:{},cov:{}})).rows.push(a); evp+=n4Evp(a); if(vis[a[3]]) by[ym].vis[a[3]]=vis[a[3]]; });
+  Object.keys(cov).forEach(k=>{ const ym=k.slice(0,7); if(by[ym]) by[ym].cov[k]=cov[k]; });
+  return {byMonth:by,fileMin:mn,fileMax:mx,t0,t1,mv:n,evp,bad,rs:0,ex:0,dup,units,sheets:sh.length,leg:true,legT1:t1};
+}
 /* fusion avec ce qui est deja enregistre. Chaque shift garde la plage horaire des mouvements deja comptes (cov) :
    - shift absent de l'ancien enregistrement : ajoute ;
    - deux plages qui ne se chevauchent pas (ex. 23:00-24:00 dans un fichier, 00:00-07:00 dans le suivant, coupure a minuit entre deux onglets de 15 jours) : additionnees ;
@@ -1177,13 +1202,13 @@ function n4Merge(old,add){
   add.rows.forEach(r=>{ const m=mode.get(bk(r)); if(m==='new') rows.push(r); else if(m==='sum'){ const o=sumMap.get(rk(r)); if(o){ o[6]+=r[6]; o[7]+=r[7]; o[8]+=r[8]; } else sumMap.set(rk(r),r.slice()); } });
   sumMap.forEach(r=>rows.push(r));
   const days=rows.map(r=>r[0]).sort(), t0=old&&old.t0&&old.t0<add.t0?old.t0:add.t0, t1=old&&old.t1&&old.t1>add.t1?old.t1:add.t1;
-  return {doc:{kind:'n4',id:'n4-'+add.ym,ym:add.ym,rows,cov,vis:Object.assign({},(old&&old.vis)||{},add.vis),first:days[0],last:days[days.length-1],t0,t1,asof:add.asof,src:add.src},skipped:0};
+  return {doc:{kind:'n4',id:'n4-'+add.ym,ym:add.ym,rows,cov,vis:Object.assign({},(old&&old.vis)||{},add.vis),first:days[0],last:days[days.length-1],t0,t1,asof:add.asof,src:add.src,legT0:(add.legT1?(old&&old.legT0&&old.legT0<add.t0?old.legT0:add.t0):(old&&old.legT0)||undefined),legT1:add.legT1||(old&&old.legT1)||undefined},skipped:0};
 }
 async function saveN4(p,name){
   if(!monLoaded) await loadMonthly(); let ok=0, skipped=0;
-  for(const ym of Object.keys(p.byMonth).sort()){ const r=n4Merge(mon['n4-'+ym],Object.assign({},p.byMonth[ym],{ym,asof:todayCasa(),src:name,fileMin:p.fileMin,fileMax:p.fileMax,t0:p.t0,t1:p.t1})); skipped+=r.skipped; if(r.doc&&await saveMonthly(r.doc)) ok++; }
+  for(const ym of Object.keys(p.byMonth).sort()){ const r=n4Merge(mon['n4-'+ym],Object.assign({},p.byMonth[ym],{ym,asof:todayCasa(),src:name,fileMin:p.fileMin,fileMax:p.fileMax,t0:p.t0,t1:p.t1,legT1:p.legT1})); skipped+=r.skipped; if(r.doc&&await saveMonthly(r.doc)) ok++; }
   const ue=await saveN4Units(p.units||[]);
-  trMode='n4'; tab='traf'; toast(`N4 : ${p.mv.toLocaleString('fr-FR')} mouvements, ${Math.round(p.evp).toLocaleString('fr-FR')} EVP (${p.t0.slice(0,10)} → ${p.t1.slice(0,10)}).`+(skipped?` ${skipped} shift(s) partiel(s) isolé(s) écarté(s) (mois sans shift complet).`:'')+(ue?' Conteneurs non enregistrés : '+ue:'')); render(); return ok>0;
+  trMode='n4'; tab='traf'; toast(`${p.leg?'Avant Navis':'N4'} : ${p.mv.toLocaleString('fr-FR')} mouvements, ${Math.round(p.evp).toLocaleString('fr-FR')} EVP (${p.t0.slice(0,10)} → ${p.t1.slice(0,10)}).`+(skipped?` ${skipped} shift(s) partiel(s) isolé(s) écarté(s) (mois sans shift complet).`:'')+(ue?' Conteneurs non enregistrés : '+ue:'')); render(); return ok>0;
 }
 /* ---- v7.58 : ecran « Trafic reel (N4) » ---- */
 let trMode='cmp', n4Per=null, n4From='', n4To='', n4Sh='ALL', n4By='cie';
@@ -1214,7 +1239,9 @@ function renderN4(){
   const tot=n4Agg(rows,()=>'x')[0]||{mv:0,evp:0,c:{}}, cats=N4_CATS.map(([k,l])=>({k,l,evp:tot.c[k]||0,mv:rows.filter(r=>r[5]===k).reduce((s,r)=>s+n4Mv(r),0)}));
   const days=[...new Set(rows.map(r=>r[0]))].sort().map(d=>{ const o={d,TC3:0,TCE:0,mv:0}; rows.filter(r=>r[0]===d).forEach(r=>{ const e=n4Evp(r); o[r[2]]=(o[r[2]]||0)+e; o.mv+=n4Mv(r); }); o.t=(o.TC3||0)+(o.TCE||0); return o; });
   const byT=n4Agg(rows,r=>r[2]).sort((x,y)=>y.evp-x.evp), byS=n4Agg(rows,r=>String(r[1])).sort((x,y)=>x.k<y.k?-1:1);
-  const cie=n4Agg(rows,r=>r[4]).sort((x,y)=>y.evp-x.evp), ves=n4Agg(rows,r=>r[3]+'|'+r[2]).sort((x,y)=>y.evp-x.evp);
+  const cie=n4Agg(rows,r=>r[4]).sort((x,y)=>y.evp-x.evp), ves0=n4Agg(rows,r=>r[3]+'|'+r[2]);
+  /* v7.64 : un même navire (même nom) avec plusieurs escales est regroupé sur une seule ligne */
+  const ves=(()=>{ const g=new Map(); ves0.forEach(o=>{ const [v,t]=o.k.split('|'), nm=vname(v), key=(/^Escale /.test(nm)?'#'+v:nm.trim().toUpperCase())+'|'+t; let x=g.get(key); if(!x){ x={k:key,nm,t,mv:0,evp:0,vs:[]}; g.set(key,x); } x.mv+=o.mv; x.evp+=o.evp; x.vs.push({v,mv:o.mv,evp:o.evp}); }); return [...g.values()].map(x=>(x.vs.sort((p,q)=>p.v<q.v?-1:1),x)).sort((x,y)=>y.evp-x.evp); })();
   const pc=(x,t)=>t?(100*x/t).toFixed(1).replace('.',',')+' %':'—', nj=days.length;
   const covWarn=n4Per==='R'&&(a<first||b>last)?`<p class="m-note m-w">Données N4 disponibles du ${trDay(first)} au ${trDay(last)} seulement.</p>`:'';
   let body=imp+segHtml(tt,'traf');
@@ -1229,11 +1256,11 @@ function renderN4(){
   { const byM=n4Agg(rows,r=>r[0].slice(0,7)).sort((x,y)=>x.k<y.k?-1:1); if(byM.length>1){ const ev=(m,t)=>rows.filter(r=>r[0].slice(0,7)===m&&r[2]===t).reduce((z,r)=>z+n4Evp(r),0);
     body+=`<section class="m-box"><b class="tr-h">Mois par mois (${lab})</b><table class="tr-t"><thead><tr><th style="text-align:left">Mois</th>${tt==='ALL'?'<th>TC3</th><th>TCE</th>':''}<th>Mvts</th><th>EVP</th></tr></thead><tbody>${byM.map(o=>`<tr><td style="text-align:left">${trMois(o.k)}</td>${tt==='ALL'?`<td>${trF(ev(o.k,'TC3'))}</td><td>${trF(ev(o.k,'TCE'))}</td>`:''}<td>${trF(o.mv)}</td><td><b>${trF(o.evp)}</b></td></tr>`).join('')}</tbody></table></section>`; } }
   const seg=`<div class="seg m-seg" role="group" aria-label="Regroupement">${[['cie','Par compagnie'],['nav','Par navire']].map(([k,l])=>`<button type="button" data-n4by="${k}" aria-pressed="${k===n4By}">${l}</button>`).join('')}</div>`;
-  if(n4By==='cie') body+=`<h3 class="m-h">Trafic par compagnie maritime · ${lab}</h3>${seg}<section class="m-box"><b class="tr-h">Compagnie du conteneur (« Line Op » du TOS), classées par EVP</b><table class="tr-t"><thead><tr><th style="text-align:left">Compagnie</th><th>Mvts</th><th>EVP</th><th>Part</th></tr></thead><tbody>${cie.map(o=>`<tr><td style="text-align:left"><b>${esc(n4Line(o.k))}</b>${N4_LINES[o.k]?'':` <span class="vv">(code N4)</span>`}</td><td>${trF(o.mv)}</td><td>${trF(o.evp)}</td><td>${pc(o.evp,tot.evp)}</td></tr>`).join('')||'<tr><td colspan="4">Aucun mouvement.</td></tr>'}</tbody></table></section>`;
-  else body+=`<h3 class="m-h">Trafic par navire · ${lab}</h3>${seg}<section class="m-box"><b class="tr-h">Escales classées par EVP</b><table class="tr-t"><thead><tr><th style="text-align:left">Navire</th><th>Term.</th><th>Mvts</th><th>EVP</th></tr></thead><tbody>${ves.slice(0,40).map(o=>{ const [v,t]=o.k.split('|'); return `<tr><td style="text-align:left">${esc(vname(v))}<br><span class="vv">${esc(v)}</span></td><td>${esc(t)}</td><td>${trF(o.mv)}</td><td>${trF(o.evp)}</td></tr>`; }).join('')||'<tr><td colspan="4">Aucun mouvement.</td></tr>'}</tbody></table>${ves.length>40?`<p class="m-note">${ves.length-40} autre(s) escale(s) dans l'export Excel.</p>`:''}</section>`;
+  if(n4By==='cie') body+=`<h3 class="m-h">Trafic par compagnie maritime · ${lab}</h3>${seg}<section class="m-box"><b class="tr-h">Compagnie du conteneur (« Line Op » du TOS), classées par EVP</b><table class="tr-t"><thead><tr><th style="text-align:left">Compagnie</th><th>Mvts</th><th>EVP</th><th>Part</th></tr></thead><tbody>${cie.map(o=>`<tr><td style="text-align:left"><b>${esc(n4Line(o.k))}</b>${N4_LINES[o.k]?'':` <span class="vv">(code)</span>`}</td><td>${trF(o.mv)}</td><td>${trF(o.evp)}</td><td>${pc(o.evp,tot.evp)}</td></tr>`).join('')||'<tr><td colspan="4">Aucun mouvement.</td></tr>'}</tbody></table></section>`;
+  else body+=`<h3 class="m-h">Trafic par navire · ${lab}</h3>${seg}<section class="m-box"><b class="tr-h">Navires classés par EVP (les escales d'un même navire sont regroupées)</b><table class="tr-t"><thead><tr><th style="text-align:left">Navire</th><th>Term.</th><th>Mvts</th><th>EVP</th></tr></thead><tbody>${ves.slice(0,40).map(o=>`<tr><td style="text-align:left">${esc(o.nm)}${o.vs.length>1?` <span class="vv">· ${o.vs.length} escales</span>`:''}<br><span class="vv">${o.vs.map(z=>esc(z.v)).join(' · ')}</span></td><td>${esc(o.t)}</td><td>${trF(o.mv)}</td><td>${trF(o.evp)}</td></tr>`).join('')||'<tr><td colspan="4">Aucun mouvement.</td></tr>'}</tbody></table>${ves.length>40?`<p class="m-note">${ves.length-40} autre(s) navire(s) dans l'export Excel.</p>`:''}</section>`;
   if(days.length) body+=`<section class="m-box"><b class="tr-h">Jour par jour (${lab})</b><table class="tr-t"><thead><tr><th style="text-align:left">Jour</th>${tt==='ALL'?'<th>TC3</th><th>TCE</th>':''}<th>Mvts</th><th>EVP</th></tr></thead><tbody>${days.map(d=>`<tr><td style="text-align:left">${trDay(d.d)}</td>${tt==='ALL'?`<td>${trF(d.TC3)}</td><td>${trF(d.TCE)}</td>`:''}<td>${trF(d.mv)}</td><td><b>${trF(d.t)}</b></td></tr>`).join('')}</tbody></table></section>`;
   const dd=docs[docs.length-1], t0=docs[0].t0||first, t1=dd.t1||last;
-  body+=`<p class="m-note">Source : TOS Navis N4, mouvements de navire (déchargement + chargement, y compris vides), restow exclu. Données du ${esc(String(t0).slice(0,16))} au ${esc(String(t1).slice(0,16))}, importées le ${esc(dd.asof||'')}. Le jour est celui du début du shift (le S3 de 23 h à 7 h appartient au jour où il commence). EVP : 20' = 1, 40' = 2, 45' = ${N4_EVP45}. Le terminal N4 « TCR » est affiché TCE. Le dernier shift peut être incomplet.</p><div class="m-date"><button type="button" class="m-go" id="n4X">Exporter cette vue en Excel</button></div>`;
+  body+=`<p class="m-note">Source : TOS Navis N4, mouvements de navire (déchargement + chargement, y compris vides), restow exclu. Données du ${esc(String(t0).slice(0,16))} au ${esc(String(t1).slice(0,16))}, importées le ${esc(dd.asof||'')}. Le jour est celui du début du shift (le S3 de 23 h à 7 h appartient au jour où il commence). EVP : 20' = 1, 40' = 2, 45' = ${N4_EVP45}. Le terminal N4 « TCR » est affiché TCE. Le dernier shift peut être incomplet.${(()=>{ const L=docs.filter(d=>d.legT1).map(d=>d.legT1).sort().pop(); return L?` Jusqu'au ${esc(L.slice(0,16))}, les mouvements viennent de l'ancien système de pointage (avant le démarrage de Navis) : import et export seulement, sans transbordement ; les codes compagnie y sont ceux du pointage.`:''; })()}</p><div class="m-date"><button type="button" class="m-go" id="n4X">Exporter cette vue en Excel</button></div>`;
   window.__n4X={lab,a,b,sh,tot,cats,byT,byS,cie,ves,days,vname};
   app.innerHTML=mTop('Trafic réel · TOS N4',`${trDay(a)} → ${trDay(b)} · ${lab}`,false,true)+`<div class="m-body">${body}</div>`; bind();
 }
@@ -1241,15 +1268,15 @@ function n4Export(){ const X=window.__n4X; if(!X) return; const wb=XLSX.utils.bo
   const add=(nm,aoa)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),nm);
   add('Synthèse',[['Trafic réel TOS N4',X.lab],['Période',X.a+' → '+X.b],['Shift',X.sh==='ALL'?'Tous':X.sh],[],['Indicateur','Mouvements','EVP'],['Total',X.tot.mv,N(X.tot.evp)],...X.cats.filter(c=>c.mv).map(c=>[c.l,c.mv,N(c.evp)])]);
   add('Par compagnie',[['Compagnie (Line Op)','Code N4','Mouvements','EVP','Part %'],...X.cie.map(o=>[n4Line(o.k),o.k,o.mv,N(o.evp),X.tot.evp?+(100*o.evp/X.tot.evp).toFixed(2):0])]);
-  add('Par navire',[['Navire','Escale','Terminal','Mouvements','EVP'],...X.ves.map(o=>{ const [v,t]=o.k.split('|'); return [X.vname(v),v,t,o.mv,N(o.evp)]; })]);
+  add('Par navire',[['Navire','Escales','Terminal','Mouvements','EVP'],...X.ves.map(o=>[o.nm,o.vs.map(z=>z.v).join(' / '),o.t,o.mv,N(o.evp)])]);
   add('Par jour',[['Jour','TC3 EVP','TCE EVP','Mouvements','EVP'],...X.days.map(d=>[d.d,N(d.TC3||0),N(d.TCE||0),d.mv,N(d.t)])]);
   add('Par shift',[['Shift','Mouvements','EVP'],...X.byS.map(o=>[(N4_SH.find(x=>x[0]===o.k)||[0,'S'+o.k])[1],o.mv,N(o.evp)])]);
   XLSX.writeFile(wb,`Trafic_N4_${X.a}_${X.b}.xlsx`); }
 /* ---- v7.59 : historique par conteneur (table n4_moves) + onglet « Conteneur » ---- */
-async function saveN4Units(ev){ if(!ev.length) return ''; const m=new Map(); ev.forEach(e=>m.set(e.unit+'|'+e.t+'|'+e.kind,e)); const A=[...m.values()];
-  for(let i=0;i<A.length;i+=1000){ const {error}=await sb.from('n4_moves').upsert(A.slice(i,i+1000),{onConflict:'unit,t,kind'});
-    if(error) return /relation|does not exist|schema cache/i.test(error.message)?'table n4_moves absente (exécuter SUPABASE_table_n4_moves.sql)':error.message;
-    if(i&&i%10000===0) toast(`Enregistrement des conteneurs… ${i.toLocaleString('fr-FR')} / ${A.length.toLocaleString('fr-FR')}`); }
+async function saveN4Units(ev){ if(!ev.length) return ''; const m=new Map(); ev.forEach(e=>m.set(e.unit+'|'+e.t+'|'+e.kind,e)); const A=[...m.values()], B=[]; for(let i=0;i<A.length;i+=1000) B.push(A.slice(i,i+1000));
+  for(let i=0;i<B.length;i+=4){ const rs=await Promise.all(B.slice(i,i+4).map(b=>sb.from('n4_moves').upsert(b,{onConflict:'unit,t,kind'}))), er=rs.map(r=>r.error).find(Boolean);
+    if(er) return /relation|does not exist|schema cache/i.test(er.message)?'table n4_moves absente (exécuter SUPABASE_table_n4_moves.sql)':er.message;
+    if(B.length>12&&i%20===0) toast(`Enregistrement des conteneurs… ${Math.min(A.length,i*1000).toLocaleString('fr-FR')} / ${A.length.toLocaleString('fr-FR')}`); }
   return ''; }
 let ctnQ='', ctnRes=null, ctnSel=null, ctnMsg='', ctnBusy=false;
 const ctnFmt=u=>/^[A-Z]{4}\d{7}$/.test(u)?u.slice(0,4)+' '+u.slice(4):u;
@@ -1268,8 +1295,8 @@ function ctnCard(u,E){
   const docs=Object.values(mon).filter(x=>x&&x.kind==='n4'), vis=Object.assign({},...docs.map(d=>d.vis||{})), vn=v=>(vis[v]&&vis[v].n)||('escale '+v);
   const ev=E.slice().sort((a,b)=>a.t<b.t?-1:1), mv=ev.filter(e=>e.kind!=='S'), D=mv.filter(e=>e.kind==='D').pop(), L=mv.filter(e=>e.kind==='L').pop(), x=ev[ev.length-1];
   const lab={D:'Déchargé du navire',L:'Chargé sur le navire',S:'Restow à bord'}, frt=x.frt==='E'?'vide':'plein';
-  const sum=[]; if(D) sum.push(`<b>Import</b> · déchargé le <b>${ctnDate(D.t)}</b> du ${esc(vn(D.visit))}, déposé en <b>${esc(ctnPos(D.pos_to))}</b>.`);
-  if(L) sum.push(`<b>Export</b> · chargé le <b>${ctnDate(L.t)}</b> sur le ${esc(vn(L.visit))}, pris en <b>${esc(ctnPos(L.pos_from))}</b>.`);
+  const sum=[]; if(D) sum.push(`<b>Import</b> · déchargé le <b>${ctnDate(D.t)}</b> du ${esc(vn(D.visit))}${D.pos_to?`, déposé en <b>${esc(ctnPos(D.pos_to))}</b>`:''}.`);
+  if(L) sum.push(`<b>Export</b> · chargé le <b>${ctnDate(L.t)}</b> sur le ${esc(vn(L.visit))}${L.pos_from?`, pris en <b>${esc(ctnPos(L.pos_from))}</b>`:''}.`);
   if(D&&L&&L.t>D.t) sum.push('Le conteneur est arrivé puis reparti par navire (transit ou réexpédition).');
   const isV=p=>/^V-/.test(String(p||'')); let pp=null; ev.slice().reverse().some(e=>{ if(e.kind==='D'&&e.pos_to&&!isV(e.pos_to)){ pp={c:ctnYard(e.pos_to),t:e.t,w:'après déchargement'}; return true; } if(e.kind==='L'&&e.pos_from&&!isV(e.pos_from)){ pp={c:ctnYard(e.pos_from),t:e.t,w:'avant chargement'}; return true; } return false; });
   const posBox=`<div style="background:#1f3a6d;color:#fff;border-radius:14px;padding:10px 12px;margin:8px 0 10px;text-align:center"><div style="font-size:12px;letter-spacing:.1em;opacity:.85">POSITION</div>${pp?`<div style="font-size:40px;font-weight:800;letter-spacing:.04em;line-height:1.15">${esc(pp.c)}</div><div style="font-size:12px;opacity:.85">dernière position enregistrée · ${ctnDate(pp.t)} (${pp.w})</div>`:'<div style="font-size:18px;font-weight:700;margin:6px 0">Non disponible</div><div style="font-size:12px;opacity:.85">aucune position de parc dans les mouvements importés</div>'}</div>`;
@@ -1291,6 +1318,7 @@ async function importFiles(files){
   let ok=0; for(const f of files){
     try{ if(f.size>1500000){ toast('Lecture du fichier volumineux, patientez quelques secondes…'); await new Promise(r=>setTimeout(r,60)); } const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'});
       if(isN4Wb(wb)){ if(await saveN4(parseN4(wb),f.name)) ok++; continue; }
+      if(isLegWb(wb)){ toast('Lecture des mouvements avant Navis…'); await new Promise(r=>setTimeout(r,30)); if(await saveN4(parseLegacy(wb),f.name)) ok++; continue; }
       if(isBilanWb(wb)){ if(await saveMonthly(parseBilan(wb,n=>gridRows(wb.Sheets[n])))) ok++; }
       else if(isPerfWb(wb)){ if(await saveMonthly(parsePerf(wb,n=>gridRows(wb.Sheets[n])))) ok++; }
       else if(isTraficRows(gridRows(wb.Sheets[wb.SheetNames[0]]))){ if(await saveMonthly(parseTrafic(gridRows(wb.Sheets[wb.SheetNames[0]])))) ok++; }
@@ -1455,7 +1483,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.63';
+const APP_V='7.65';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';
