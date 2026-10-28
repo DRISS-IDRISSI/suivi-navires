@@ -224,6 +224,9 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.66 — Par navire : une seule ligne par navire, avec terminal et escales
+- Un navire (même nom) n'apparaît plus qu'une fois, même s'il a travaillé sur TC3 et TCE : ligne de total (mouvements, EVP, nombre d'escales), puis une ligne par terminal avec ses escales. L'export Excel suit (ligne « TOTAL » + une ligne par terminal).
+
 ## v7.65 — Mouvements avant le démarrage de Navis (ancien système de pointage)
 - Nouveau fichier reconnu : classeur avec les feuilles « Import » et « Export » (colonnes DATE_HEURE_POINTAGE, TERMINAL, VAR, NAME, DIMENSION, VISIT, NUMERO…). Import par le même bouton de l'écran Trafic.
 - Mêmes règles que N4 : jour de shift = heure − 7 h (la colonne DATE_TRAVAIL de l'ancien système, qui est le jour civil, n'est pas utilisée), EVP 20' = 1, 40' = 2, 45' = 2, vides inclus. Catégories import / export plein / vide ; pas de transbordement.
