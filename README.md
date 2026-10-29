@@ -224,6 +224,13 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.78 — Noms d'escales gardés même sans mouvement dans le fichier
+- Avant : un nom n'était retenu que si l'escale avait des mouvements dans le même fichier ; si les mouvements venaient d'un autre fichier (ou d'une autre période), l'escale restait « Escale 2026… ». Maintenant tous les noms de l'onglet des escales sont enregistrés (id n4-names).
+- Pour récupérer les noms manquants : réimporter un fichier N4 récent contenant l'onglet des escales.
+
+## v7.77 — Mouvements isolés après l'escale
+- Dans « Par navire », les escales qui n'ont que quelques mouvements (moins de 10, et moins de 5 % de l'escale principale du navire) sont listées à part : « mouvements isolés enregistrés après l'escale ». Les totaux ne changent pas.
+
 ## v7.76 — Nommer une escale sans nom
 - Escale 202610109 = X-PRESS SOUSSE.
 - Dans « Par navire », chaque « Escale xxxxxxxxx » sans nom porte un lien « ✎ nommer » : saisir le nom du navire, il est enregistré (table monthly, id n4-names) et l'escale rejoint les autres escales du même navire.
