@@ -224,6 +224,10 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.76 — Nommer une escale sans nom
+- Escale 202610109 = X-PRESS SOUSSE.
+- Dans « Par navire », chaque « Escale xxxxxxxxx » sans nom porte un lien « ✎ nommer » : saisir le nom du navire, il est enregistré (table monthly, id n4-names) et l'escale rejoint les autres escales du même navire.
+
 ## v7.75 — Titres des classements avec la période
 - « Classement des armateurs par EVP · <période> » et « Classement des navires par EVP · <période> » (mois sélectionné, dernier jour, 7 jours, tous les mois ou période libre).
 
