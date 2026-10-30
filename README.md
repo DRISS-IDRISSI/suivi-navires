@@ -224,6 +224,8 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.79 — Escale 202610083 = CIELO DI RABAT (nom fixé)
+
 ## v7.78 — Noms d'escales gardés même sans mouvement dans le fichier
 - Avant : un nom n'était retenu que si l'escale avait des mouvements dans le même fichier ; si les mouvements venaient d'un autre fichier (ou d'une autre période), l'escale restait « Escale 2026… ». Maintenant tous les noms de l'onglet des escales sont enregistrés (id n4-names).
 - Pour récupérer les noms manquants : réimporter un fichier N4 récent contenant l'onglet des escales.
