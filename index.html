@@ -1283,8 +1283,10 @@ function renderN4(){
   document.querySelectorAll('[data-nm]').forEach(x=>x.onclick=e=>{ e.preventDefault(); n4NameVisit(x.dataset.nm); });
 }
 /* v7.76 : noms d'escales saisis a la main (escale absente de l'onglet des escales) ; enregistres dans monthly (id n4-names) */
-const N4_VIS_FIX={'202610109':{n:'X-PRESS SOUSSE',l:''},'202610083':{n:'CIELO DI RABAT',l:'MAE'}};
-const n4Vis=docs=>Object.assign({},N4_VIS_FIX,...docs.map(d=>d.vis||{}),(mon['n4-names']&&mon['n4-names'].vis)||{});
+const N4_VIS_FIX={'202610109':{n:'X-PRESS SOUSSE',l:''},'202610083':{n:'CIELO DI RABAT',l:'MAE'},'202610103':{n:'MSC MOSS III',l:'MSC'}};
+/* v7.80 : si l'onglet des escales N4 n'a pas le nom, on le prend dans les rapports horaires et rapports de shift deja recus (meme numero d'escale) */
+function appVis(){ const o={}; try{ (hours||[]).forEach(h=>(h.cranes||[]).forEach(c=>{ if(c.visit&&c.vessel) o[c.visit]={n:String(c.vessel).trim().toUpperCase(),l:''}; })); (snaps||[]).forEach(sn=>(sn.vessels||[]).forEach(v=>{ if(v.visit&&v.name) o[v.visit]={n:String(v.name).trim().toUpperCase(),l:''}; })); }catch(e){} return o; }
+const n4Vis=docs=>Object.assign({},appVis(),N4_VIS_FIX,...docs.map(d=>d.vis||{}),(mon['n4-names']&&mon['n4-names'].vis)||{});
 async function n4NameVisit(v){ const n=prompt("Nom du navire pour l'escale "+v+" ?"); if(!n||!n.trim()) return; const o=mon['n4-names']||{kind:'n4names',id:'n4-names',vis:{}}; const d={kind:'n4names',id:'n4-names',vis:Object.assign({},o.vis||{},{[v]:{n:n.trim().toUpperCase(),l:''}})}; await saveMonthly(d); toast('Escale '+v+' : '+n.trim().toUpperCase()); render(); }
 function n4Export(){ const X=window.__n4X; if(!X) return; const wb=XLSX.utils.book_new(), N=x=>Math.round(x);
   const add=(nm,aoa)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),nm);
@@ -1505,7 +1507,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.79';
+const APP_V='7.80';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';

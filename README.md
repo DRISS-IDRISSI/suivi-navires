@@ -224,6 +224,10 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.80 — Noms d'escales repris des rapports horaires et de shift
+- Quand l'onglet des escales N4 n'a pas le nom d'une escale, l'application le prend dans les rapports horaires et rapports de shift déjà reçus (même numéro d'escale). Priorité : nom saisi à la main > onglet des escales N4 > rapports horaires / shift.
+- 202610103 = MSC MOSS III.
+
 ## v7.79 — Escale 202610083 = CIELO DI RABAT (nom fixé)
 
 ## v7.78 — Noms d'escales gardés même sans mouvement dans le fichier
