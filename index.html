@@ -403,8 +403,10 @@ function isPerfWb(wb) {
 }
 function parsePerfDay(R) {
   const d0 = (R[4] || [])[21];
-  if (typeof d0 !== "number" || d0 < 4e4) return null;
-  const out = { d: serialToYmd(d0), TCE: { lines: [], sh: {}, tot: null }, TC3: { lines: [], sh: {}, tot: null }, sum: {} };
+  /* v7.81 : la date de l'onglet peut etre un nombre (serie Excel) ou un texte « 17/10/2026 » (rapports recus apres le 16/10) */
+  let dd = null; if (typeof d0 === "number" && d0 >= 4e4) dd = serialToYmd(d0); else { const m = String(d0 == null ? "" : d0).trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/); if (m) dd = m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0"); else { const m2 = String(d0 == null ? "" : d0).trim().match(/^(\d{4})-(\d{2})-(\d{2})/); if (m2) dd = m2[1] + "-" + m2[2] + "-" + m2[3]; } }
+  if (!dd) return null;
+  const out = { d: dd, TCE: { lines: [], sh: {}, tot: null }, TC3: { lines: [], sh: {}, tot: null }, sum: {} };
   for (let r = 0; r < R.length; r++) {
     const t = sTxt(R[r][4]);
     if (t !== "TCE" && t !== "TC3" || sTxt(R[r][5]) !== "NAVIRE") continue;
@@ -1507,7 +1509,7 @@ const poste=v=>meta[v.visit]||(sitBy(v.visit)||{}).poste||'';
 let cman={};
 const manFor=id=>{ const m=cman[id]; if(!m||!m.vessel) return null; const sn=lastSnap(), hh=lastHour(); if((sn&&m.ts<sn.ts)||(hh&&hh.ts&&hh.cranes.some(c=>c.id===id&&c.visit)&&m.ts<hh.ts)) return null; return m; };
 /* navire de chaque portique d'apres le dernier rapport horaire (nouveau format : VISIT_ID + VESSEL_NAME) */
-const APP_V='7.80';
+const APP_V='7.81';
 const mbxHM=iso=>{ const t=Date.parse(iso); return isNaN(t)?'—':new Date(t).toLocaleString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); };
 /* etat de la reception automatique des e-mails (ecrit par la fonction mailbox toutes les 5 minutes) : visible des responsables seulement */
 const mbxWarn=()=>{ if(!MBX||!canDrv()) return ''; const age=(Date.now()-Date.parse(MBX.t))/60000, rec=MBX.dernier_recu?(Date.now()-Date.parse(MBX.dernier_recu))/60000:null; let m='';

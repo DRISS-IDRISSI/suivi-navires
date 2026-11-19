@@ -224,6 +224,10 @@ Nouvel onglet **Direction**, visible par tous les profils (menu ☰ > Direction 
 ## v7.27 — Ligne de diagnostic
 - Au bas de l'écran Direction : version de l'application, dernier rapport horaire en base (date/heure, ancien ou nouveau format, nombre de portiques avec navire) et dernier rapport de shift. Permet de vérifier d'un coup d'œil que la bonne version est chargée et que les rapports entrent.
 
+## v7.81 — Rapport de performance : jours à partir du 17/10 de nouveau lus
+- La date de l'onglet de chaque jour peut être un texte (« 17/10/2026 ») et non plus un nombre Excel : ces jours étaient ignorés, d'où « octobre (au 16/10) ». Corrigé dans l'application (import manuel) et dans la fonction ingest-report v14 (réception automatique par e-mail).
+- Test : fichier d'octobre complet = 31 jours lus, 20/10 : TCE 810 et TC3 817 mouvements (comme dans le fichier).
+
 ## v7.80 — Noms d'escales repris des rapports horaires et de shift
 - Quand l'onglet des escales N4 n'a pas le nom d'une escale, l'application le prend dans les rapports horaires et rapports de shift déjà reçus (même numéro d'escale). Priorité : nom saisi à la main > onglet des escales N4 > rapports horaires / shift.
 - 202610103 = MSC MOSS III.
